@@ -23,6 +23,8 @@ export interface CompositionStore extends CompositionState {
     id: string,
     patch: Partial<Pick<Layer, 'x' | 'y' | 'width' | 'height'>>,
   ) => void
+  /** Set a layer's opacity, clamped to [0, 1]. */
+  updateLayerOpacity: (id: string, opacity: number) => void
   /** Remove a layer; clears selection if it was the selected one. */
   deleteLayer: (id: string) => void
   /** Move a layer within the array and renumber z-indices densely (base stays 0). */
@@ -99,6 +101,14 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
     set((state) => ({
       layers: state.layers.map((l) =>
         l.id === id ? { ...l, ...patch } : l,
+      ),
+      isDirty: true,
+    })),
+
+  updateLayerOpacity: (id, opacity) =>
+    set((state) => ({
+      layers: state.layers.map((l) =>
+        l.id === id ? { ...l, opacity: Math.min(1, Math.max(0, opacity)) } : l,
       ),
       isDirty: true,
     })),

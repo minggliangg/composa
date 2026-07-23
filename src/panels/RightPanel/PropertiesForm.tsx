@@ -38,7 +38,7 @@ export function PropertiesForm() {
 
   if (!layer) {
     return (
-      <div className="rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-500">
+      <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">
         select a layer to edit its properties
       </div>
     )
@@ -56,6 +56,7 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
   const updateLayerTransform = useCompositionStore(
     (s) => s.updateLayerTransform,
   )
+  const updateLayerOpacity = useCompositionStore((s) => s.updateLayerOpacity)
 
   // Local string drafts for the four inputs.
   const [drafts, setDrafts] = useState<Record<Field, string>>({
@@ -130,13 +131,13 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm">
+    <div className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Filename
         </span>
         <span
-          className="break-all font-medium text-slate-700"
+          className="break-all font-medium text-slate-200"
           title={layer.originalFilename}
           data-testid="properties-filename"
         >
@@ -145,16 +146,16 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
       </div>
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Natural size
         </span>
-        <span className="text-slate-600" data-testid="properties-natural-size">
+        <span className="text-slate-300" data-testid="properties-natural-size">
           {layer.naturalWidth} × {layer.naturalHeight}px
         </span>
       </div>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Transform
         </legend>
         <div className="grid grid-cols-2 gap-2">
@@ -172,12 +173,38 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
                 onChange={(e) => handleChange(key, e.target.value)}
                 onFocus={() => handleFocus(key)}
                 onBlur={() => handleBlur(key)}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 data-testid={`properties-input-${key}`}
               />
             </label>
           ))}
         </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Opacity
+        </legend>
+        <label
+          className="flex items-center gap-2"
+          data-testid="properties-field-opacity"
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(layer.opacity * 100)}
+            onChange={(e) =>
+              updateLayerOpacity(layer.id, Number(e.target.value) / 100)
+            }
+            className="h-1.5 w-full flex-1 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
+            data-testid="properties-input-opacity"
+          />
+          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-400">
+            {Math.round(layer.opacity * 100)}%
+          </span>
+        </label>
       </fieldset>
 
       {layer.isBaseImage && (

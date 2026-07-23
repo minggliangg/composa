@@ -6,7 +6,7 @@ import { PropertiesForm } from './PropertiesForm'
  */
 export function RightPanel() {
   return (
-    <aside className="flex w-full flex-col gap-3 rounded-md border border-slate-300 bg-slate-50 p-3 md:w-80">
+    <aside className="flex w-full flex-col gap-3 rounded-md border border-slate-800 bg-slate-900 p-3 shadow-sm md:w-80">
       <PropertiesForm />
     </aside>
   )

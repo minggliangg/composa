@@ -84,12 +84,12 @@ export function TopBar() {
 
   return (
     <>
-    <header className="flex items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3 text-slate-50">
+    <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 shadow-sm">
       <div className="flex items-center gap-2">
-        <span className="text-lg font-semibold tracking-tight">composa.</span>
+        <span className="text-lg font-semibold tracking-tight text-white">composa.</span>
         {isDirty && (
           <span
-            className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300"
+            className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300"
             data-testid="dirty-badge"
           >
             unsaved changes
@@ -98,7 +98,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="hidden text-xs text-slate-400 sm:inline">
+        <span className="hidden text-xs text-slate-500 sm:inline">
           refresh loses unsaved work
         </span>
 
@@ -109,7 +109,7 @@ export function TopBar() {
             disabled={!hasBase || exporting}
             title={exporting ? 'Exporting…' : 'Export composition as SVG'}
             aria-label="Export SVG"
-            className="rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
             data-testid="export-button"
           >
             {exporting ? 'Exporting…' : 'Export'}
@@ -130,7 +130,7 @@ export function TopBar() {
           disabled={!hasLayers}
           title="Clear the composition"
           aria-label="Reset composition"
-          className="rounded-md border border-red-800 bg-red-900/70 px-3 py-1.5 text-sm font-medium text-red-100 transition-colors hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-700 disabled:text-slate-400"
+          className="rounded-md border border-red-900 bg-red-950/60 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-transparent disabled:text-slate-600"
           data-testid="reset-button"
         >
           Reset
@@ -154,7 +154,7 @@ export function TopBar() {
           role="status"
           aria-live="polite"
           data-testid="unsaved-banner"
-          className="flex items-center gap-2 border-b border-amber-400/60 bg-amber-50 px-4 py-1.5 text-xs text-amber-900"
+          className="flex items-center gap-2 border-b border-amber-700/40 bg-amber-900/30 px-4 py-1.5 text-xs text-amber-200"
         >
           <span aria-hidden="true" className="text-sm leading-none">
             ⚠

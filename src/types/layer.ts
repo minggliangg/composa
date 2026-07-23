@@ -46,6 +46,8 @@ export interface Layer {
   naturalHeight: number
   /** Rotation in degrees. MODEL ONLY for MVP, always 0. */
   rotation: number
+  /** Opacity, 0 (fully transparent) to 1 (fully opaque). Exported as-is. */
+  opacity: number
   /** Dense int paint order; base image = 0. Array sorted by this IS SVG order. */
   zIndex: number
   /** Visibility. MODEL ONLY for MVP, always true. */

@@ -51,6 +51,7 @@ describe('exportComposition — no-base guard', () => {
           naturalWidth: 10,
           naturalHeight: 10,
           rotation: 0,
+          opacity: 1,
           zIndex: 1,
           visible: true,
           locked: false,

@@ -40,10 +40,10 @@ export function CompositionCanvas() {
     return (
       <section
         aria-label="Composition canvas"
-        className="flex min-h-[240px] min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-dashed border-slate-300 bg-white p-4"
+        className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-dashed border-slate-700 bg-slate-950 p-4"
       >
-        <div className="text-center text-sm text-slate-400">
-          <p className="font-medium text-slate-500">composition canvas (empty)</p>
+        <div className="text-center text-sm text-slate-500">
+          <p className="font-medium text-slate-400">composition canvas (empty)</p>
           <p className="mt-1">upload a base image to begin</p>
         </div>
       </section>
@@ -59,7 +59,7 @@ export function CompositionCanvas() {
       // `overflow-visible` + the svg's own `overflow="visible"` let a layer
       // dragged partly off-canvas render beyond the canvas boundary in the
       // editor (the root app shell still clips at the window).
-      className="flex min-h-[240px] min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-slate-300 bg-slate-200 p-4"
+      className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-slate-800 bg-slate-950 p-4 shadow-inner"
     >
       <svg
         ref={svgRef}
@@ -71,7 +71,7 @@ export function CompositionCanvas() {
         // overlays). At export, buildSvgDocument emits a fresh <svg> whose
         // default overflow clips the viewport — that crop is intentional.
         overflow="visible"
-        className="max-h-full max-w-full"
+        className="max-h-full max-w-full shadow-2xl"
         role="img"
         aria-label="Composition"
         // Prevent the browser's native touch scrolling/gestures from hijacking

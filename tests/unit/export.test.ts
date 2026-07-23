@@ -28,6 +28,7 @@ function makeLayer(partial: Partial<Layer>): Layer {
     naturalWidth: 10,
     naturalHeight: 10,
     rotation: 0,
+    opacity: 1,
     zIndex: 0,
     visible: true,
     locked: false,
@@ -208,6 +209,22 @@ describe('buildSvgDocument', () => {
     expect(overlay1.getAttribute('y')).toBe('40')
     expect(overlay1.getAttribute('width')).toBe('100')
     expect(overlay1.getAttribute('height')).toBe('80')
+  })
+
+  it('emits a non-1 layer opacity verbatim on the exported <image>', () => {
+    const stateWithOpacity: CompositionState = {
+      ...FIXED_STATE,
+      layers: FIXED_STATE.layers.map((l) =>
+        l.id === 'overlay-1' ? { ...l, opacity: 0.5 } : l,
+      ),
+    }
+    const built = buildSvgDocument(stateWithOpacity, FIXED_URIS, FIXED_OPTS)
+    const doc = parse(built)
+    const images = Array.from(doc.querySelectorAll('image'))
+    // base (z=0), overlay-1 (z=1, opacity 0.5), overlay-2 (z=2, default opacity).
+    expect(images[0].getAttribute('opacity')).toBe('1')
+    expect(images[1].getAttribute('opacity')).toBe('0.5')
+    expect(images[2].getAttribute('opacity')).toBe('1')
   })
 
   it('every <image> href equals the provided data URI', () => {

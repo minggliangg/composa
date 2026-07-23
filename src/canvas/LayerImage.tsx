@@ -38,6 +38,7 @@ export function LayerImage({ layer, svgRef }: LayerImageProps) {
         y={layer.y}
         width={layer.width}
         height={layer.height}
+        opacity={layer.opacity}
         preserveAspectRatio="none"
         pointerEvents="none"
         data-layer-id={layer.id}
@@ -59,6 +60,7 @@ export function LayerImage({ layer, svgRef }: LayerImageProps) {
         y={layer.y}
         width={layer.width}
         height={layer.height}
+        opacity={layer.opacity}
         preserveAspectRatio="none"
       />
     </g>

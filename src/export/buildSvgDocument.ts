@@ -74,6 +74,7 @@ export function buildSvgDocument(
       ` y="${layer.y}"` +
       ` width="${layer.width}"` +
       ` height="${layer.height}"` +
+      ` opacity="${layer.opacity}"` +
       ` preserveAspectRatio="none"` +
       ` data-filename="${xmlEscapeAttr(layer.originalFilename)}"` +
       `${roleAttr} />`

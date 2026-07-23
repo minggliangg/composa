@@ -98,7 +98,7 @@ export function ConfirmDialog({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel()
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
       data-testid="confirm-dialog-backdrop"
     >
       <div
@@ -108,18 +108,18 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
         onKeyDown={onKeyDown}
-        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-slate-300 bg-white p-5 shadow-xl"
+        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-2xl"
         data-testid="confirm-dialog"
       >
         <h2
           id="confirm-dialog-title"
-          className="text-base font-semibold text-slate-800"
+          className="text-base font-semibold text-slate-100"
         >
           {title}
         </h2>
         <p
           id="confirm-dialog-message"
-          className="text-sm text-slate-600"
+          className="text-sm text-slate-400"
         >
           {message}
         </p>
@@ -128,7 +128,7 @@ export function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500"
             data-testid="confirm-cancel"
           >
             {cancelLabel}

@@ -103,7 +103,7 @@ function computeOverlayPlacement(
 }
 
 const DROP_AREA_CLASS =
-  'flex cursor-pointer flex-col gap-0.5 rounded-md border border-dashed border-slate-300 bg-white p-3 text-center transition-colors hover:border-slate-400 hover:bg-slate-50'
+  'flex cursor-pointer flex-col gap-0.5 rounded-md border border-dashed border-slate-700 bg-slate-800/60 p-3 text-center transition-colors hover:border-slate-500 hover:bg-slate-800'
 
 /**
  * Base + overlay upload dropzone. Each labeled area is a `<label>` wrapping a
@@ -170,6 +170,7 @@ export function UploadDropzone() {
         naturalWidth: decoded.naturalWidth,
         naturalHeight: decoded.naturalHeight,
         rotation: 0,
+        opacity: 1,
         zIndex: 0,
         visible: true,
         locked: false,
@@ -236,6 +237,7 @@ export function UploadDropzone() {
             naturalWidth: decoded.naturalWidth,
             naturalHeight: decoded.naturalHeight,
             rotation: 0,
+            opacity: 1,
             zIndex: 0,
             visible: true,
             locked: false,
@@ -296,7 +298,7 @@ export function UploadDropzone() {
             }
           }}
         />
-        <span className="text-sm font-medium text-slate-700">Base image</span>
+        <span className="text-sm font-medium text-slate-200">Base image</span>
         <span className="text-xs text-slate-500">
           click or drop one image — sets canvas size
         </span>
@@ -323,7 +325,7 @@ export function UploadDropzone() {
             }
           }}
         />
-        <span className="text-sm font-medium text-slate-700">Overlays</span>
+        <span className="text-sm font-medium text-slate-200">Overlays</span>
         <span className="text-xs text-slate-500">
           {hasBase
             ? 'click or drop — stack above the base'
@@ -342,11 +344,11 @@ export function UploadDropzone() {
       )}
 
       {errors.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <ul className="flex flex-col gap-1 rounded-md border border-red-900/60 bg-red-950/40 p-2 text-xs text-red-300">
           {errors.map((err, i) => (
             <li key={`${err.filename}-${i}`}>
               <span className="font-medium">{err.filename}</span>
-              <span className="text-red-500"> — {err.reason}</span>
+              <span className="text-red-400"> — {err.reason}</span>
             </li>
           ))}
         </ul>

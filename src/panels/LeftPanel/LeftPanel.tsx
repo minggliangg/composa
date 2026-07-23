@@ -7,7 +7,7 @@ import { LayerList } from './LayerList'
  */
 export function LeftPanel() {
   return (
-    <aside className="flex w-full flex-col gap-3 rounded-md border border-slate-300 bg-slate-50 p-3 md:w-72">
+    <aside className="flex w-full flex-col gap-3 rounded-md border border-slate-800 bg-slate-900 p-3 shadow-sm md:w-72">
       <UploadDropzone />
       <LayerList />
     </aside>

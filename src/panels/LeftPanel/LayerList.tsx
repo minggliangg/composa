@@ -114,8 +114,8 @@ export function LayerList() {
   const cancelDelete = () => setPendingDeleteId(null)
 
   return (
-    <div className="flex min-h-[120px] flex-1 flex-col gap-1 rounded-md border border-slate-200 bg-white p-2">
-      <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div className="flex min-h-30 flex-1 flex-col gap-1 rounded-md border border-slate-800 bg-slate-900/60 p-2">
+      <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Layers
       </h2>
       {length === 0 ? (

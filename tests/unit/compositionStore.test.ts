@@ -28,6 +28,7 @@ function makeBaseLayer(
     naturalWidth,
     naturalHeight,
     rotation: 0,
+    opacity: 1,
     zIndex: 0,
     visible: true,
     locked: false,
@@ -54,6 +55,7 @@ function makeOverlayLayer(
     naturalWidth: 100,
     naturalHeight: 100,
     rotation: 0,
+    opacity: 1,
     zIndex: 0,
     visible: true,
     locked: false,
@@ -143,6 +145,37 @@ describe('compositionStore', () => {
     expect(updated?.y).toBe(0)
     expect(updated?.height).toBe(600)
     expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('updateLayerOpacity sets the value and marks dirty', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    useCompositionStore.setState({ isDirty: false })
+    const base = useCompositionStore.getState().layers[0]
+
+    store().updateLayerOpacity(base.id, 0.5)
+
+    const updated = useCompositionStore
+      .getState()
+      .layers.find((l) => l.id === base.id)
+    expect(updated?.opacity).toBe(0.5)
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('updateLayerOpacity clamps out-of-range values to [0, 1]', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const base = useCompositionStore.getState().layers[0]
+
+    store().updateLayerOpacity(base.id, 5)
+    expect(
+      useCompositionStore.getState().layers.find((l) => l.id === base.id)
+        ?.opacity,
+    ).toBe(1)
+
+    store().updateLayerOpacity(base.id, -2)
+    expect(
+      useCompositionStore.getState().layers.find((l) => l.id === base.id)
+        ?.opacity,
+    ).toBe(0)
   })
 
   it('deleteLayer removes the layer, clears a matching selection, and sets dirty', () => {
