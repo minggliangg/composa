@@ -20,6 +20,10 @@ export default defineConfig({
   // `es2022` matches the app tsconfig `target: es2023`, is the right baseline
   // for a WASM + module-worker app, and avoids esbuild lowering errors that the
   // default `modules` target (safari14/es2020) raises on wasm-bindgen output.
+  // GitHub Pages serves the site at a sub-path (github.io/composa/), so the
+  // production build needs base: '/composa/'. Local dev keeps base '/' to avoid
+  // a /composa/ prefix on localhost. GITHUB_ACTIONS is set in CI only.
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/composa/' : '/',
   build: { target: 'es2022' },
   plugins: [react(), tailwindcss(), wasm(), topLevelAwait()],
   worker: {
