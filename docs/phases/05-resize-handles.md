@@ -23,8 +23,8 @@ Provide all eight selection handles with the locked MVP resize rules.
 
 - Unit tests cover every handle and minimum-size behavior.
 - A Playwright test resizes a layer through at least one corner and one edge.
-- `npm run build` succeeds.
+- `bun run build` succeeds.
 
 ## Manual check
 
-Run `npm run dev`, select an overlay, drag a corner handle and verify its proportions stay fixed; then drag a side handle and verify only width or height changes.
+Run `bun run dev`, select an overlay, drag a corner handle and verify its proportions stay fixed; then drag a side handle and verify only width or height changes.

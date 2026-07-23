@@ -6,7 +6,7 @@ We're building **composa.** — a single-page "image composition board": upload 
 
 The user specifically wants WASM incorporated into this SPA. Rather than force WASM into a place it doesn't help (drag math, SVG string building — both fast enough in plain JS), the natural fit is the one genuinely CPU-heavy part of this app: **image codec work**. A Rust/WASM module decodes uploads, produces a downscaled preview for smooth canvas interaction, and re-encodes the full-resolution original into the exported SVG — so the app stays fast to use but never loses quality on export. This also directly solves the spec's "very large images affecting performance" edge case rather than just noting it.
 
-Local toolchain check: `cargo`/`rustc` and Node v24/npm 11 are present; `wasm-pack` is **not yet installed** (`cargo install wasm-pack` is a setup step in M1/M7).
+Local toolchain check: `cargo`/`rustc`, Node v24, and Bun 1.3 are present. Bun replaces npm as the package manager and script runner (`bun install`, `bun run <script>`, `bunx <bin>`); the project keeps Vitest and Playwright as the test runners. `wasm-pack` is **not yet installed** (`cargo install wasm-pack` is a setup step in M1/M7).
 
 ## Decisions locked in (confirmed with user, not open for re-litigation)
 
@@ -52,7 +52,7 @@ composa/
 └── scripts/build-wasm.sh
 ```
 
-Build wiring: `wasm-pack build crates/image-processor --target web --release --out-dir ../../src/wasm/pkg` runs before `vite`/`vite build` (npm scripts `dev`/`build` both call it first). `--target web` gives a self-initializing ES module that `vite-plugin-wasm` + `vite-plugin-top-level-await` can import directly with no bundler-specific resolution assumptions. Generated `pkg/` is git-ignored; only the hand-written `imageProcessor.ts` wrapper is committed.
+Build wiring: `wasm-pack build crates/image-processor --target web --release --out-dir ../../src/wasm/pkg` runs before `vite`/`vite build` (bun scripts `dev`/`build` both call it first). `--target web` gives a self-initializing ES module that `vite-plugin-wasm` + `vite-plugin-top-level-await` can import directly with no bundler-specific resolution assumptions. Generated `pkg/` is git-ignored; only the hand-written `imageProcessor.ts` wrapper is committed.
 
 ## 2. WASM Module Design (`crates/image-processor/src/lib.rs`)
 
@@ -183,7 +183,7 @@ _Option:_ since the WASM pipeline is the least-familiar part of the stack, consi
 
 ## Verification
 
-- After each milestone (M1–M9), run `npm run dev` and manually exercise that milestone's demo criteria (listed above) in a real browser.
+- After each milestone (M1–M9), run `bun run dev` and manually exercise that milestone's demo criteria (listed above) in a real browser.
 - After M8, open the exported `.svg` file directly in a browser and confirm it renders identically to the live canvas at full resolution; inspect `data-filename` attributes for correct XML-escaping on a filename with special characters (e.g. `photo & friends.png`).
-- Run `npm run build` (which chains `wasm-pack build` then `vite build`) to confirm the production build succeeds — this is the point where WASM/Vite integration issues surface.
-- Run the Vitest suite (`npx vitest run`) and Playwright suite (`npx playwright test`) once M6–M8 land.
+- Run `bun run build` (which chains `wasm-pack build` then `vite build`) to confirm the production build succeeds — this is the point where WASM/Vite integration issues surface.
+- Run the Vitest suite (`bun run test`) and Playwright suite (`bun run test:e2e`) once M6–M8 land.

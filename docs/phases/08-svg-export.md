@@ -24,8 +24,8 @@ Export the canonical composition state as one self-contained SVG using full-reso
 
 - Unit tests cover `xmlEscapeAttr` and deterministic SVG generation from fixed mock state.
 - A Playwright download test parses the resulting SVG XML and checks metadata, layer ordering, embedded data URIs, and escaped filenames.
-- `npm run build`, `npx vitest run`, and `npx playwright test` succeed.
+- `bun run build`, `bun run test`, and `bun run test:e2e` succeed.
 
 ## Manual check
 
-Run `npm run dev`, compose a base with a transparent PNG overlay and an image named `photo & friends.png`, export it, then open the downloaded SVG directly in a browser and inspect its source: it should match the arrangement and contain an escaped `data-filename`.
+Run `bun run dev`, compose a base with a transparent PNG overlay and an image named `photo & friends.png`, export it, then open the downloaded SVG directly in a browser and inspect its source: it should match the arrangement and contain an escaped `data-filename`.

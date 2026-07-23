@@ -1,0 +1,21 @@
+[package]
+name = "image-processor"
+version = "0.1.0"
+edition = "2021"
+description = "composa. WASM image codec module: decode, downscale, and re-encode uploads."
+license = "MIT"
+
+[lib]
+# cdylib -> wasm-pack/wasm32 output; rlib -> native `cargo test` / `cargo build`.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+# Trimmed to exactly the formats composa. accepts. `default-features = false`
+# also drops the `rayon` parallel backend (not viable on single-threaded wasm).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+base64 = "0.22"
+# Surfaces Rust panics in the browser console. Gated behind a wasm-only call
+# site in lib.rs so the native test target still links.
+console_error_panic_hook = "0.1"

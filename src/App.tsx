@@ -1,0 +1,24 @@
+import { TopBar } from './panels/TopBar'
+import { LeftPanel } from './panels/LeftPanel/LeftPanel'
+import { CompositionCanvas } from './canvas/CompositionCanvas'
+import { RightPanel } from './panels/RightPanel/RightPanel'
+
+/**
+ * Static three-panel editor shell. No editor behavior yet (Phase 01):
+ * TopBar above a responsive row of LeftPanel | CompositionCanvas | RightPanel.
+ * Panels stack vertically on narrow screens and remain visually distinct.
+ */
+function App() {
+  return (
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
+      <TopBar />
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row">
+        <LeftPanel />
+        <CompositionCanvas />
+        <RightPanel />
+      </div>
+    </div>
+  )
+}
+
+export default App

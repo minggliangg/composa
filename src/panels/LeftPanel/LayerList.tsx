@@ -1,0 +1,167 @@
+/**
+ * Layer list (Phase 06).
+ *
+ * Renders every layer in DESCENDING z-index order: the topmost layer (highest
+ * z-index, paints on top) at the top of the list, the base image pinned at the
+ * bottom. The store array is ASCENDING (base at index 0, overlays ascending),
+ * so `listOrder` helpers flip between the two orderings — reordering calls hit
+ * the store with correctly mapped indices, and the store renumbers densely
+ * with the base pinned at z-index 0.
+ *
+ * Owns one shared `ConfirmDialog` for deletion (rather than one per row) so
+ * there's a single focus-managed confirmation surface. Tracks the id of the
+ * layer pending deletion in local state.
+ */
+import { useState } from 'react'
+import type { DragEvent } from 'react'
+import { useCompositionStore } from '../../state/compositionStore'
+import { dedupeDisplayNames } from '../../upload/filenameDisplay'
+import { listIndexToStoreIndex } from './listOrder'
+import { LayerListItem } from './LayerListItem'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+
+export function LayerList() {
+  const layers = useCompositionStore((s) => s.layers)
+  const selectedLayerId = useCompositionStore((s) => s.selectedLayerId)
+  const selectLayer = useCompositionStore((s) => s.selectLayer)
+  const deleteLayer = useCompositionStore((s) => s.deleteLayer)
+  const reorderLayer = useCompositionStore((s) => s.reorderLayer)
+
+  // Id of the layer awaiting delete confirmation. Null = dialog closed.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  // Displayed-list index of the row currently being dragged (for drop styling).
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
+
+  // Displayed descending: highest z-index first, base (z=0) last. The store
+  // array is already ascending so reversing gives the display order. We DON'T
+  // re-sort by zIndex here — the invariant is array-order == z-order (base at
+  // 0), maintained by the store's reorderLayer.
+  const displayLayers = [...layers].reverse()
+
+  // Compute display labels over the DISPLAYED set: collisions get deterministic
+  // `(n)` suffixes before the extension, while the original filename in state
+  // (and thus in export metadata) stays verbatim. Recomputed every render from
+  // the current layer set, so it always tracks additions/deletions/reorders.
+  const displayNames = dedupeDisplayNames(
+    displayLayers.map((l) => l.originalFilename),
+  )
+
+  const length = displayLayers.length
+  const pendingDeleteLayer = pendingDeleteId
+    ? layers.find((l) => l.id === pendingDeleteId)
+    : null
+
+  // Move a displayed row by one slot. Converts displayed indices to store
+  // indices before calling reorderLayer.
+  const moveByOne = (fromList: number, toList: number) => {
+    if (toList < 0 || toList >= length) return
+    const fromStore = listIndexToStoreIndex(fromList, length)
+    const toStore = listIndexToStoreIndex(toList, length)
+    reorderLayer(fromStore, toStore)
+  }
+
+  // --- HTML5 drag-and-drop handlers ---
+
+  const onDragStart = (listIndex: number) => (e: DragEvent<HTMLLIElement>) => {
+    setDraggingIndex(listIndex)
+    // Firefox requires dataTransfer to be set for drag to start.
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(listIndex))
+  }
+
+  const onDragOver = (listIndex: number) => (e: DragEvent<HTMLLIElement>) => {
+    // The base row (last displayed index) is never a valid drop target —
+    // overlays cannot be reordered past it.
+    if (listIndex === length - 1) return
+    if (draggingIndex === null) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDropTargetIndex(listIndex)
+  }
+
+  const onDrop = (listIndex: number) => (e: DragEvent<HTMLLIElement>) => {
+    e.preventDefault()
+    const fromList = draggingIndex
+    setDraggingIndex(null)
+    setDropTargetIndex(null)
+    if (fromList === null) return
+    // Don't allow dropping onto the base row.
+    if (listIndex >= length - 1) return
+    if (fromList === listIndex) return
+    const fromStore = listIndexToStoreIndex(fromList, length)
+    const toStore = listIndexToStoreIndex(listIndex, length)
+    reorderLayer(fromStore, toStore)
+  }
+
+  const onDragLeave = () => {
+    setDropTargetIndex(null)
+  }
+
+  const onDragEnd = () => {
+    // Fired by the dragged source when the drag finishes (drop or cancel).
+    setDraggingIndex(null)
+    setDropTargetIndex(null)
+  }
+
+  const confirmDelete = () => {
+    if (pendingDeleteId) {
+      deleteLayer(pendingDeleteId)
+    }
+    setPendingDeleteId(null)
+  }
+
+  const cancelDelete = () => setPendingDeleteId(null)
+
+  return (
+    <div className="flex min-h-[120px] flex-1 flex-col gap-1 rounded-md border border-slate-200 bg-white p-2">
+      <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Layers
+      </h2>
+      {length === 0 ? (
+        <p className="px-1 py-2 text-sm text-slate-500">no layers yet</p>
+      ) : (
+        <ul
+          className="flex flex-col gap-0.5"
+          onDragEnd={onDragEnd}
+          data-testid="layer-list"
+        >
+          {displayLayers.map((layer, listIndex) => (
+            <LayerListItem
+              key={layer.id}
+              layer={layer}
+              displayFilename={displayNames[listIndex] ?? layer.originalFilename}
+              selected={selectedLayerId === layer.id}
+              listIndex={listIndex}
+              listLength={length}
+              isDropTarget={dropTargetIndex === listIndex}
+              onSelect={() => selectLayer(layer.id)}
+              onRequestDelete={() => setPendingDeleteId(layer.id)}
+              onMoveUp={() => moveByOne(listIndex, listIndex - 1)}
+              onMoveDown={() => moveByOne(listIndex, listIndex + 1)}
+              onDragStart={onDragStart(listIndex)}
+              onDragOver={onDragOver(listIndex)}
+              onDrop={onDrop(listIndex)}
+              onDragLeave={onDragLeave}
+            />
+          ))}
+        </ul>
+      )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete layer?"
+        message={
+          pendingDeleteLayer
+            ? `"${pendingDeleteLayer.originalFilename}" will be removed from the composition. This cannot be undone.`
+            : 'This layer will be removed from the composition.'
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    </div>
+  )
+}

@@ -22,8 +22,8 @@ Add multiple image overlays as visible, non-interactive layers above the base.
 
 - Unit tests cover adding several overlays and their z-index/order invariants.
 - Unsupported client-side file selections show a clear rejection rather than producing a broken layer.
-- `npm run build` succeeds.
+- `bun run build` succeeds.
 
 ## Manual check
 
-Run `npm run dev`, upload a base and then three distinct overlay images; all three should be visible, with the last uploaded one visibly on top where they overlap.
+Run `bun run dev`, upload a base and then three distinct overlay images; all three should be visible, with the last uploaded one visibly on top where they overlap.

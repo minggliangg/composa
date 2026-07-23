@@ -23,8 +23,8 @@ Let a user choose one base image and use its natural dimensions as the SVG compo
 
 - Unit tests cover base-image state transitions and reset behavior.
 - A source inspection confirms `viewBox="0 0 canvas.width canvas.height"` is driven by state.
-- `npm run build` succeeds.
+- `bun run build` succeeds.
 
 ## Manual check
 
-Run `npm run dev`, upload a clearly non-square image as the base, and confirm the SVG canvas adopts its aspect ratio rather than stretching it to the panel.
+Run `bun run dev`, upload a clearly non-square image as the base, and confirm the SVG canvas adopts its aspect ratio rather than stretching it to the panel.

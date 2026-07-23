@@ -24,8 +24,8 @@ Close the documented MVP edge cases and make data-loss and error behavior clear 
 
 - Unit and E2E suites cover filename deduplication, validation/error mapping, export guards, and destructive-action confirmation paths.
 - A final edge-case checklist records results for transparency, off-canvas clipping, duplicate display, refresh warning, special-character export, and large-image responsiveness.
-- `npm run build`, `npx vitest run`, and `npx playwright test` all succeed.
+- `bun run build`, `bun run test`, and `bun run test:e2e` all succeed.
 
 ## Manual check
 
-Run `npm run dev`, make a change and refresh/close the tab to confirm the browser warning; then repeat with duplicate-named overlays and an off-canvas overlay, export the result, and verify that the boundary is absent while the SVG viewport crops the off-canvas content.
+Run `bun run dev`, make a change and refresh/close the tab to confirm the browser warning; then repeat with duplicate-named overlays and an off-canvas overlay, export the result, and verify that the boundary is absent while the SVG viewport crops the off-canvas content.

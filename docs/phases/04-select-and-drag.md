@@ -23,8 +23,8 @@ Enable reliable layer selection and pointer-driven movement in SVG coordinate sp
 
 - Unit tests cover movement-delta math.
 - A Playwright test performs a pointer drag against the rendered SVG and asserts the layer transform changes.
-- `npm run build` succeeds.
+- `bun run build` succeeds.
 
 ## Manual check
 
-Run `npm run dev`, upload a base and overlay, resize the browser so the canvas is letterboxed, then drag the overlay partly beyond the base boundary; it should follow the pointer and remain selectable.
+Run `bun run dev`, upload a base and overlay, resize the browser so the canvas is letterboxed, then drag the overlay partly beyond the base boundary; it should follow the pointer and remain selectable.

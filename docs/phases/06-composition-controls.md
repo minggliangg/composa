@@ -23,8 +23,8 @@ Finish the non-WASM editor loop: users can inspect, reorder, edit, delete, reset
 
 - Unit tests cover select, delete, reorder, reset, and numeric transform updates.
 - An E2E test confirms reordering changes visible SVG paint order and property edits move/resize the corresponding layer.
-- `npx vitest run`, `npx playwright test`, and `npm run build` succeed.
+- `bun run test`, `bun run test:e2e`, and `bun run build` succeed.
 
 ## Manual check
 
-Run `npm run dev`, add two overlapping overlays, move the lower one above the other in the layer list, edit its `x` value in Properties, then delete it and cancel the confirmation once before confirming it.
+Run `bun run dev`, add two overlapping overlays, move the lower one above the other in the layer list, edit its `x` value in Properties, then delete it and cancel the confirmation once before confirming it.

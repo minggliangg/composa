@@ -1,0 +1,36 @@
+# Edge-case verification — composa. MVP
+
+Phase 09 close-out. This records, for **every row** of the MVP implementation
+plan §7 edge-case table, how it is verified (automated test / E2E / manual), the
+result, and any browser limitation with its mitigation.
+
+Verification run (Phase 09): `bun run build` ✅, `bun run test` ✅ (135 unit),
+`bun run test:e2e` ✅ (12 E2E).
+
+| # | Edge case (plan §7) | How verified | Result | Limitation / mitigation |
+| - | ------------------- | ------------ | ------ | ------------------------ |
+| 1 | **Duplicate filenames** | Unit `tests/unit/filenameDisplay.test.ts` (`dedupeDisplayNames`); E2E `tests/e2e/edge-cases.spec.ts` ("two overlays with the same filename get deduped (n) display labels"). Impl: `src/upload/filenameDisplay.ts`, wired in `src/panels/LeftPanel/LayerList.tsx`. | ✅ PASS — first occurrence keeps the bare name; the 2nd gets ` (1)` before the extension, 3rd ` (2)`, etc. The stored `originalFilename` (and therefore export metadata) is **never** mutated; only the displayed label changes. | None. |
+| 2 | **Very large images** | Rust unit `dimension_check_rejects_oversized` + `dimensions_too_large_surfaces_stable_code` (codec-level guard at `MAX_SOURCE_DIMENSION = 12000`); JS `MAX_SOURCE_DIMENSION` exported from `src/upload/fileValidation.ts`; decode/re-encode run in the Web Worker (`src/wasm/worker.ts`) so the UI thread is never blocked; canvas only ever renders the downscaled preview. | ✅ PASS — inputs >12000px on either axis are rejected with `dimensions_too_large`; heavy codec work is off-thread. | UI-thread responsiveness is a **manual DevTools performance check** (not reliably automatable). Manual check: uploading a large image keeps the canvas/panels responsive while the worker processes. |
+| 3 | **Unsupported file types** | Unit `tests/unit/fileValidation.test.ts` (cheap gate: lying extension, lying MIME, empty file, unknown types); Rust `garbage_bytes_yield_unsupported_format` + `truncated_png_yields_decode_failed`; unit `tests/unit/errorMessages.test.ts` maps codes to copy. | ✅ PASS — the cheap client pre-check is **intentionally lenient** (rejects only when BOTH MIME and extension are unrecognized, so a renamed/under-typed image still reaches the authoritative gate). The WASM magic-byte sniff is the authoritative gate and emits stable codes. | None. |
+| 4 | **Transparent PNG overlays** | Rust unit `reencode_original_preserves_alpha_dimensions` (codec preserves alpha through re-encode); E2E `tests/e2e/transparent.spec.ts` uploads an RGBA overlay, exports, and asserts the embedded PNG's IHDR **color type == 6** (truecolor + alpha) after the full round-trip. | ✅ PASS — alpha survives WASM decode + downscale (preview) and `reencode_original` (exported bytes). | None. |
+| 5 | **Overlays dragged off-canvas** | E2E `tests/e2e/edge-cases.spec.ts` ("editor shows a dashed canvas boundary, does not clip, and keeps off-canvas coords"): asserts the editor `<svg>` has `overflow="visible"`, the dashed `[data-editor-only="boundary"]` rect outlines the canvas with `pointer-events="none"`, and an overlay moved to `x=250` on a 200px canvas keeps `x=250` (coordinates are **not** clamped). Export omits the boundary: unit `tests/unit/export.test.ts` ("contains NO editor-only elements ... no boundary rect"). | ✅ PASS — editor is unclamped and shows the export-crop boundary; export builds from state and crops off-canvas content via standard SVG viewport clipping. | The fact that off-canvas pixels actually paint beyond the boundary in the editor is a **manual visual check** (hard to assert robustly via bounding-box geometry). Manual check confirmed. |
+| 6 | **Accidental deletion** | E2E `tests/e2e/controls.spec.ts` ("delete confirm: cancel keeps the layer, confirm removes it"; "reset/clear confirm empties the composition"). Shared `ConfirmDialog` backs delete and reset/clear. | ✅ PASS — every destructive action is confirmed; cancel is a no-op. | None. |
+| 7 | **Refresh before export** | `src/panels/TopBar.tsx`: `beforeunload` listener (reads `isDirty` live from the store via `useCompositionStore.getState()`) calls `e.preventDefault()` + sets `e.returnValue = ''` when dirty; a persistent amber banner (`data-testid="unsaved-banner"`) states that refreshing/closing loses work and that there is **no persistence** in this MVP. | ✅ PASS — dirty state triggers both the in-app banner and the native unload guard. | **Browser limitation:** the native `beforeunload` dialog **wording is browser-controlled and cannot be customized** — per the HTML spec we can only trigger it (`preventDefault`/`returnValue`), not change its text. **Mitigation:** the persistent in-app banner states the consequences in plain language *before* any navigation, so the user is never surprised; the generic native dialog is a secondary backstop. The dialog firing/wording across browsers is a **manual check** (flaky to script). |
+| 8 | **Unusual export formats** | `src/export/buildSvgDocument.ts` always embeds each layer via `reencode_original`, which normalizes the bytes to a `data:image/png;base64,...` URI regardless of the upload's declared MIME/extension; Rust `reencode_original_returns_data_uri_png`; E2E `tests/e2e/export.spec.ts` asserts every exported href is `data:image/png;base64,...`. | ✅ PASS — the exported file never trusts the upload's self-reported type; actual bytes are normalized. | None. |
+| 9 | **Filename XML escaping** | Unit `tests/unit/export.test.ts` (`xmlEscapeAttr` table + "XML-escapes the data-filename in the raw output (special chars -> entities)"); E2E `tests/e2e/export.spec.ts` round-trips `photo & friends.png` and asserts the raw bytes contain `data-filename="photo &amp; friends.png"` while the parsed attribute un-escapes back. | ✅ PASS — `& < > " '` are escaped in `data-filename`; the exported XML is well-formed. | None. |
+| 10 | **Cropping vs resizing** | Architectural + automated: `buildSvgDocument` emits `preserveAspectRatio="none"` on every `<image>` (stretch to the recorded width/height — no crop/fit), asserted in unit `tests/unit/export.test.ts` ("every <image> carries ... preserveAspectRatio='none'"). No crop UI; the `Layer` model leaves room for a future `cropRect`. Off-canvas content is cropped at export purely by the SVG viewport (standard SVG clipping), with no special export-time code. | ✅ PASS — MVP always stretches; export crop is the SVG viewport. | None. |
+
+## Notes
+
+- **`beforeunload` dialog wording (cross-cutting browser limitation).** The
+  native "Leave site?" dialog text is controlled entirely by the browser (Chrome
+  shows a generic "Changes you made may not be saved"; Firefox/Safari have their
+  own copy) and **cannot be customized from JavaScript** — the spec only lets a
+  page *trigger* it. composa. mitigates this with the always-on amber banner
+  (`src/panels/TopBar.tsx`, shown whenever `isDirty`) that explains in plain
+  language that refreshing/closing loses work and that there is no persistence.
+- **Manual / DevTools-only checks** (per MVP plan §9 "Manual"): large-image
+  main-thread responsiveness (DevTools performance profiling), the visual
+  rendering of off-canvas content beyond the editor boundary, and the native
+  `beforeunload` dialog firing/wording. These are recorded above as manual
+  checks because they cannot be reliably automated across browsers.

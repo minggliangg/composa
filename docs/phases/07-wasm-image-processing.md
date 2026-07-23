@@ -22,10 +22,10 @@ Replace the temporary browser image pipeline with Rust/WASM image decoding and d
 
 ## Verifiable evidence
 
-- `npm run build` generates the WASM package and completes Vite’s production build.
+- `bun run build` generates the WASM package and completes Vite’s production build.
 - Rust-side tests (where applicable) and JS tests validate stable error-code mapping and Worker proxy behavior.
 - Browser DevTools shows Worker activity during upload; the main thread remains responsive while processing a large valid image.
 
 ## Manual check
 
-Run `npm run dev`, upload a large valid image, and immediately interact with the page while it processes; the page should remain responsive and the finished image should appear as a preview. Then try an unsupported file and confirm a readable error.
+Run `bun run dev`, upload a large valid image, and immediately interact with the page while it processes; the page should remain responsive and the finished image should appear as a preview. Then try an unsupported file and confirm a readable error.
