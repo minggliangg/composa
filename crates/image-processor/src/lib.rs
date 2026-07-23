@@ -63,6 +63,11 @@ impl From<image::ImageError> for ProcError {
         // supported image but were broken, so it collapses to `DecodeFailed`.
         match err {
             image::ImageError::Unsupported(_) => ProcError::UnsupportedFormat,
+            image::ImageError::Limits(err)
+                if matches!(err.kind(), image::error::LimitErrorKind::DimensionError) =>
+            {
+                ProcError::DimensionsTooLarge
+            }
             _ => ProcError::DecodeFailed,
         }
     }
@@ -81,18 +86,35 @@ fn check_dimensions(width: u32, height: u32) -> Result<(), ProcError> {
     }
 }
 
-/// Magic-byte sniff + decode via the `image` crate, then enforce the source
-/// dimension cap on the natural (decoded) size.
+/// Magic-byte sniff + header probe via the `image` crate, then enforce the
+/// source dimension cap before decoding any pixel data.
 ///
 /// NOTE on animated GIF: `image::load_from_memory` decodes only the **first
 /// frame** of an animated GIF and discards the rest. composa. therefore treats
 /// GIFs as first-frame-only for both preview and export — animation is out of
 /// scope for the MVP and is surfaced to the user via help text. This matches
 /// the documented Phase 07 behavior.
+fn image_reader(bytes: &[u8]) -> Result<image::ImageReader<Cursor<&[u8]>>, ProcError> {
+    let mut reader = image::ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| ProcError::DecodeFailed)?;
+    // Apply strict decoder limits while each format reads its header. In
+    // particular, PNG checks them before allocating its row buffers.
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SOURCE_DIMENSION);
+    limits.max_image_height = Some(MAX_SOURCE_DIMENSION);
+    reader.limits(limits);
+    Ok(reader)
+}
+
 fn load_image(bytes: &[u8]) -> Result<image::DynamicImage, ProcError> {
-    let img = image::load_from_memory(bytes)?;
-    check_dimensions(img.width(), img.height())?;
-    Ok(img)
+    // `into_dimensions` constructs the format decoder and reads only the
+    // image metadata needed for its natural dimensions. Use a fresh reader
+    // for the actual decode because the dimension probe consumes its reader.
+    let dimensions = image_reader(bytes)?.into_dimensions()?;
+    check_dimensions(dimensions.0, dimensions.1)?;
+
+    image_reader(bytes)?.decode().map_err(ProcError::from)
 }
 
 /// Downscale `img` so its larger side equals `max_dim`, preserving aspect
@@ -329,6 +351,31 @@ mod tests {
     #[test]
     fn dimensions_too_large_surfaces_stable_code() {
         let err = check_dimensions(MAX_SOURCE_DIMENSION + 1, 1).unwrap_err();
+        assert_eq!(err.code(), "dimensions_too_large");
+    }
+
+    #[test]
+    fn oversized_header_is_rejected_before_pixel_decode() {
+        // Rewrite only the PNG IHDR dimensions of a tiny valid image. The
+        // header probe must reject this without attempting to allocate pixels.
+        let mut png = make_png(1, 1);
+        png[16..20].copy_from_slice(&(MAX_SOURCE_DIMENSION + 1).to_be_bytes());
+        // Keep the IHDR chunk valid after changing its dimensions.
+        let mut crc = 0xFFFF_FFFFu32;
+        for byte in &png[12..29] {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        png[29..33].copy_from_slice(&(!crc).to_be_bytes());
+
+        let err = probe_dimensions_inner(&png).unwrap_err();
+        assert!(matches!(err, ProcError::DimensionsTooLarge));
         assert_eq!(err.code(), "dimensions_too_large");
     }
 

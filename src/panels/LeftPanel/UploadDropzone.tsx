@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import type { CanvasConfig, Layer } from '../../types/layer'
 import { createLayerId } from '../../types/layer'
@@ -119,22 +119,37 @@ export function UploadDropzone() {
 
   const [errors, setErrors] = useState<UploadError[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  // State updates are asynchronous, so use an immediate lock as well as
+  // `isProcessing` to reject rapid picker events before the next render.
+  const processingRef = useRef(false)
 
   const hasBase = canvas !== null
   const overlayCount = layers.filter((l) => !l.isBaseImage).length
 
+  const beginProcessing = (): boolean => {
+    if (processingRef.current) return false
+    processingRef.current = true
+    setIsProcessing(true)
+    return true
+  }
+
+  const finishProcessing = (): void => {
+    processingRef.current = false
+    setIsProcessing(false)
+  }
+
   const handleBaseFiles = async (files: FileList | File[]): Promise<void> => {
     const list = Array.from(files)
     if (list.length === 0) return
+    if (!beginProcessing()) return
     const file = list[0]
-    setIsProcessing(true)
     setErrors([])
     const validation = validateImageFile(file)
     if (!validation.ok) {
       setErrors([
         { filename: file.name, reason: wasmErrorMessage(validation.reason) },
       ])
-      setIsProcessing(false)
+      finishProcessing()
       return
     }
     try {
@@ -168,14 +183,14 @@ export function UploadDropzone() {
           : wasmErrorMessage('decode_failed')
       setErrors([{ filename: file.name, reason }])
     } finally {
-      setIsProcessing(false)
+      finishProcessing()
     }
   }
 
   const handleOverlayFiles = async (files: FileList | File[]): Promise<void> => {
     const list = Array.from(files)
     if (list.length === 0) return
-    setIsProcessing(true)
+    if (!beginProcessing()) return
     setErrors([])
     const newErrors: UploadError[] = []
     let placementIndex = overlayCount
@@ -238,7 +253,7 @@ export function UploadDropzone() {
       }
     } finally {
       if (newErrors.length > 0) setErrors(newErrors)
-      setIsProcessing(false)
+      finishProcessing()
     }
   }
 
@@ -270,12 +285,15 @@ export function UploadDropzone() {
         <input
           type="file"
           accept={ACCEPT_ATTR}
+          disabled={isProcessing}
           className="sr-only"
           onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              void handleBaseFiles(e.target.files)
-            }
+            const files = e.target.files ? Array.from(e.target.files) : []
             e.target.value = ''
+            if (isProcessing || processingRef.current) return
+            if (files && files.length > 0) {
+              void handleBaseFiles(files)
+            }
           }}
         />
         <span className="text-sm font-medium text-slate-700">Base image</span>
@@ -294,13 +312,15 @@ export function UploadDropzone() {
           type="file"
           accept={ACCEPT_ATTR}
           multiple
-          disabled={!hasBase}
+          disabled={!hasBase || isProcessing}
           className="sr-only"
           onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              void handleOverlayFiles(e.target.files)
-            }
+            const files = e.target.files ? Array.from(e.target.files) : []
             e.target.value = ''
+            if (isProcessing || processingRef.current) return
+            if (files && files.length > 0) {
+              void handleOverlayFiles(files)
+            }
           }}
         />
         <span className="text-sm font-medium text-slate-700">Overlays</span>
