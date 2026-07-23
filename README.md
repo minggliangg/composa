@@ -2,7 +2,7 @@
 
 **An image composition board for the browser.** Upload a base image, layer movable / resizable overlays on top of it, and export the whole arrangement as a single self-contained SVG — images base64-embedded, filenames, positions, dimensions and layer order all preserved exactly.
 
-🔗 **Live demo:** <https://minggliangg.github.io/composa/>
+🔗 **Live demo:** <https://mingliangg.com/composa/>
 
 ---
 
