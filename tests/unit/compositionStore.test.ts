@@ -299,6 +299,19 @@ describe('compositionStore', () => {
     expect(state.isDirty).toBe(false)
   })
 
+  it('markClean clears isDirty without touching the composition', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    store().addOverlay(makeOverlayLayer('o1.png', 0, 0))
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+
+    useCompositionStore.getState().markClean()
+    const state = useCompositionStore.getState()
+    expect(state.isDirty).toBe(false)
+    // The composition itself is untouched — only the dirty flag moved.
+    expect(state.layers).toHaveLength(2)
+    expect(state.canvas).toEqual({ width: 800, height: 600 })
+  })
+
   it('addOverlay determinism: two overlays get distinct ids and positions', () => {
     store().setBaseImage(makeBaseLayer(800, 600))
     store().addOverlay(makeOverlayLayer('a.png', 5, 5))
@@ -330,5 +343,169 @@ describe('compositionStore', () => {
       .sort((a, b) => a - b)
     expect(overlayZ).toEqual([1, 2, 3])
     expect(state.isDirty).toBe(true)
+  })
+})
+
+describe('resetLayersAspect (revert to natural aspect ratio)', () => {
+  /** Build an overlay with full control over natural + rendered dims. */
+  function makeOverlayWithDims(
+    naturalWidth: number,
+    naturalHeight: number,
+    width: number,
+    height: number,
+    x = 0,
+    y = 0,
+  ): Layer {
+    const id = createLayerId()
+    return {
+      id,
+      originalFilename: 'o.png',
+      mimeType: 'image/png',
+      previewUrl: `blob:o-${id}`,
+      fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },
+      x,
+      y,
+      width,
+      height,
+      naturalWidth,
+      naturalHeight,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      visible: true,
+      locked: false,
+      isBaseImage: false,
+    }
+  }
+
+  beforeEach(() => {
+    useCompositionStore.getState().resetComposition()
+  })
+
+  it('restores a distorted layer to its natural ratio holding width, recentered vertically', () => {
+    // Natural 4:3, distorted to 200x60 (way too short for a 4:3 at width 200).
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(400, 300, 200, 60, 10, 20)
+    store().addOverlay(overlay)
+
+    store().resetLayersAspect([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    // Width held.
+    expect(result.width).toBe(200)
+    // Height derived: 200 / (400/300) = 150.
+    expect(result.height).toBe(150)
+    // Vertical center preserved: y + (oldH - newH)/2 = 20 + (60 - 150)/2 = -25.
+    expect(result.y).toBe(-25)
+    // x untouched (we hold width, recenter on y only).
+    expect(result.x).toBe(10)
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('is a near-no-op when the layer already matches its natural ratio', () => {
+    // Natural 4:3, rendered 4:3 (200x150) — already correct.
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(400, 300, 200, 150, 7, 9)
+    store().addOverlay(overlay)
+
+    store().resetLayersAspect([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width).toBe(200)
+    expect(result.height).toBe(150)
+    expect(result.x).toBe(7)
+    expect(result.y).toBe(9) // (150-150)/2 = 0 delta
+  })
+
+  it('snaps the derived height and y to the half-pixel grid', () => {
+    // Pick dims whose derived height is NOT already on the half-pixel grid.
+    // naturalRatio = 300/200 = 1.5; height = 100 / 1.5 = 66.666…
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(300, 200, 100, 40, 0, 0)
+    store().addOverlay(overlay)
+
+    store().resetLayersAspect([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    // Derived height 66.666… and y -13.333… both land on the half-pixel grid.
+    expect(result.height).toBe(66.5)
+    expect(result.y).toBe(-13.5)
+    // Snapping to the grid introduces a tiny ratio drift (100/66.5 = 1.5038),
+    // which is expected — the grid is authoritative. Assert it stays within a
+    // quarter-pixel of the true ratio rather than exact.
+    const ratio = result.width / result.height
+    expect(Math.abs(ratio - 1.5)).toBeLessThan(0.01)
+  })
+
+  it('reverts each layer independently in a multi-select (distinct ratios)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const a = makeOverlayWithDims(400, 300, 200, 60, 0, 0) // 4:3, squished
+    const b = makeOverlayWithDims(100, 100, 100, 50, 0, 0) // 1:1, squished
+    store().addOverlay(a)
+    store().addOverlay(b)
+
+    store().resetLayersAspect([a.id, b.id])
+
+    const layers = useCompositionStore.getState().layers
+    const ra = layers.find((l) => l.id === a.id)!
+    const rb = layers.find((l) => l.id === b.id)!
+    expect(ra.height).toBe(150) // 200 / (4/3)
+    expect(rb.height).toBe(100) // 100 / 1
+    expect(ra.width).toBe(200)
+    expect(rb.width).toBe(100)
+  })
+
+  it('ignores ids that do not resolve to a layer', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(400, 300, 200, 60)
+    store().addOverlay(overlay)
+    useCompositionStore.setState({ isDirty: false })
+
+    store().resetLayersAspect(['nope-not-a-layer', overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.height).toBe(150)
+  })
+
+  it('skips layers with zero natural dimensions (guard against div-by-zero)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const zero = makeOverlayWithDims(0, 0, 200, 60)
+    store().addOverlay(zero)
+    useCompositionStore.setState({ isDirty: false })
+
+    expect(() => store().resetLayersAspect([zero.id])).not.toThrow()
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === zero.id,
+    )!
+    // Untouched.
+    expect(result.width).toBe(200)
+    expect(result.height).toBe(60)
+    expect(useCompositionStore.getState().isDirty).toBe(false)
+  })
+
+  it('is idempotent: calling twice yields the same geometry', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(400, 300, 200, 60, 10, 20)
+    store().addOverlay(overlay)
+
+    store().resetLayersAspect([overlay.id])
+    const after1 = { ...useCompositionStore.getState().layers.find((l) => l.id === overlay.id)! }
+    store().resetLayersAspect([overlay.id])
+    const after2 = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+
+    expect(after2.width).toBe(after1.width)
+    expect(after2.height).toBe(after1.height)
+    expect(after2.x).toBe(after1.x)
+    expect(after2.y).toBe(after1.y)
   })
 })

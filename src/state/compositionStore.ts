@@ -1,17 +1,38 @@
 import { create } from 'zustand'
+import { temporal } from 'zundo'
 import type { CompositionState, Layer } from '../types/layer'
 import type { SelectionMode } from './selection'
 import { quantizePatch } from '../canvas/quantize'
 
 /**
  * Zustand composition store — the single source of truth every UI surface reads
- * from and writes through. Centralized named actions keep a clean seam for a
- * future undo middleware (undo/redo itself is out of scope for MVP).
+ * from and writes through. Wrapped in zundo's `temporal` middleware so every
+ * mutation funneled through `set()` is time-travelable: ⌘Z / ⌘⇧Z restore prior
+ * composition states. Pointer gestures (drag/resize) are coalesced to a single
+ * history entry each via `useTemporalStore` `pause`/`commitGesture` (see
+ * `useCanvasPointer` + `ResizeHandle`).
+ *
+ * What history tracks: ONLY `{ canvas, layers }`. `selectedLayerIds` is excluded
+ * (selection is interaction, not composition — undo must not yank your selection
+ * around) and `isDirty` is excluded (decision D1 = option a: the save-status dot
+ * is sticky-true once you edit; Export/Reset still clear it; undo never touches
+ * it). Actions are excluded too — they're stable across sets and have no place
+ * in a snapshot.
  *
  * Selectors should stay granular (e.g. `s => s.canvas`) so only the components
  * that actually depend on a slice re-render — important for the high-frequency
- * transform updates that arrive in Phase 04+.
+ * transform updates.
  */
+
+/** Max snapshots kept in each of past/future. Object URLs (previewUrl) are
+ *  shared by reference across snapshots, so even full-res sources stay cheap. */
+export const HISTORY_LIMIT = 50
+
+/**
+ * The slice of state that history actually records. Narrowing here (rather than
+ * omitting fields) keeps the type honest: a snapshot is just canvas + layers.
+ */
+export type TrackedComposition = Pick<CompositionState, 'canvas' | 'layers'>
 
 /** A transform patch bound to the layer it applies to (used by the batch action). */
 export interface LayerTransformUpdate {
@@ -39,12 +60,22 @@ export interface CompositionStore extends CompositionState {
   updateLayersTransform: (updates: LayerTransformUpdate[]) => void
   /** Set a layer's opacity, clamped to [0, 1]. */
   updateLayerOpacity: (id: string, opacity: number) => void
+  /** Revert one or more layers to their source aspect ratio, holding each
+   *  layer's current width and re-anchoring so the center stays put (D2: keep
+   *  width + center anchor). Routed through the shared transform seam, so each
+   *  patch is snapped to the half-pixel grid and registers as one undo step
+   *  once history lands. Layers with no natural dims are skipped. */
+  resetLayersAspect: (ids: string[]) => void
   /** Remove a layer; drops it from the selection if present. */
   deleteLayer: (id: string) => void
   /** Move a layer within the array and renumber z-indices densely (base stays 0). */
   reorderLayer: (fromIndex: number, toIndex: number) => void
   /** Clear the whole composition back to its initial empty state. */
   resetComposition: () => void
+  /** Flip `isDirty` back to false without touching the composition — called
+   *  after a successful Export so the save-status indicator can settle. This is
+   *  the "save" loop until real persistence lands. */
+  markClean: () => void
 }
 
 const initialState: CompositionState = {
@@ -57,19 +88,56 @@ const initialState: CompositionState = {
 /**
  * Revoke a preview object URL if it looks like one. Object URLs always begin
  * with `blob:`; plain strings (e.g. in tests) are left alone. Centralized here
- * so every action that drops a layer reclaims its preview bytes consistently.
+ * so reclaim logic stays consistent.
+ *
+ * NOTE: revocation is IRREVERSIBLE. `deleteLayer` deliberately does NOT revoke,
+ * because undo can revive a deleted layer — a revoked blob would render as a
+ * broken image after undo. URLs are reclaimed only at true point-of-no-return
+ * operations (`resetComposition` + `clearHistory`), where revived layers can no
+ * longer come back. The cost of this deferral is a bounded per-deleted-layer
+ * URL leak until the next reset, which is acceptable (reclaimed on tab close).
  */
 function revokePreview(url: string): void {
   if (url.startsWith('blob:')) URL.revokeObjectURL(url)
 }
 
-export const useCompositionStore = create<CompositionStore>()((set, get) => ({
-  ...initialState,
+/**
+ * Revoke every preview object URL reachable from the CURRENT composition AND
+ * from any history snapshot (past or future). Used at point-of-no-return
+ * operations (reset) where revived layers can no longer come back, so their
+ * blob bytes can finally be reclaimed. Idempotent on already-revoked URLs.
+ *
+ * Safe to call before `useCompositionStore` is fully used: it only touches the
+ * temporal store at call time, by which point the module is initialized.
+ */
+function reclaimAllPreviewUrls(): void {
+  const seen = new Set<string>()
+  const revokeIfNew = (url: string) => {
+    if (seen.has(url)) return
+    seen.add(url)
+    revokePreview(url)
+  }
+  // Current layers.
+  useCompositionStore.getState().layers.forEach((l) => revokeIfNew(l.previewUrl))
+  // Snapshots still held in history. (Without the `diff` option every snapshot
+  // is a full TrackedComposition, but the zundo types can't see that, so guard
+  // for the optional `layers` defensively.)
+  const t = useCompositionStore.temporal.getState()
+  for (const snap of [...t.pastStates, ...t.futureStates]) {
+    snap.layers?.forEach((l) => revokeIfNew(l.previewUrl))
+  }
+}
+
+export const useCompositionStore = create<CompositionStore>()(
+  temporal(
+    (set, get) => ({
+      ...initialState,
 
   setBaseImage: (layer) => {
     const prev = get()
-    const oldBase = prev.layers.find((l) => l.isBaseImage)
-    if (oldBase) revokePreview(oldBase.previewUrl)
+    // Do NOT revoke a previous base's previewUrl: undo can restore it, and a
+    // revoked blob would render as a broken image. Reclamation is deferred to
+    // resetComposition (the only true point-of-no-return).
     // Keep existing overlays; the new base always leads the array at z-index 0.
     const overlays = prev.layers.filter((l) => !l.isBaseImage)
     const base: Layer = {
@@ -169,11 +237,33 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
       isDirty: true,
     })),
 
+  resetLayersAspect: (ids) =>
+    // Hold each layer's current width, derive height = width / naturalRatio,
+    // and shift y so the layer's vertical center stays put (D2 decision).
+    // Routed through updateLayersTransform → half-pixel snap + one undo step.
+    get().updateLayersTransform(
+      get()
+        .layers.filter(
+          (l) =>
+            ids.includes(l.id) &&
+            l.naturalWidth > 0 &&
+            l.naturalHeight > 0,
+        )
+        .map((l) => {
+          const ratio = l.naturalWidth / l.naturalHeight
+          const height = l.width / ratio
+          const y = l.y + (l.height - height) / 2
+          return { id: l.id, patch: { height, y } }
+        }),
+    ),
+
   deleteLayer: (id) =>
     set((state) => {
       const target = state.layers.find((l) => l.id === id)
       if (!target) return state
-      revokePreview(target.previewUrl)
+      // NOTE: do NOT revoke target.previewUrl here. Undo can revive this layer,
+      // and a revoked blob URL would render as a broken image after undo.
+      // Reclamation is deferred to resetComposition / clearHistory.
       return {
         layers: state.layers.filter((l) => l.id !== id),
         selectedLayerIds: state.selectedLayerIds.filter((x) => x !== id),
@@ -206,8 +296,29 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
     }),
 
   resetComposition: () => {
-    // Reclaim every live preview URL before dropping references.
-    get().layers.forEach((l) => revokePreview(l.previewUrl))
+    // Reclaim every live preview URL — current layers AND any that survive only
+    // inside history snapshots (e.g. a deleted layer revived in a past state).
+    // Then drop state + wipe history: "Reset" is a one-way trip, not undoable.
+    reclaimAllPreviewUrls()
     set({ ...initialState })
+    useCompositionStore.temporal.getState().clear()
   },
-}))
+
+  markClean: () => set({ isDirty: false }),
+    }),
+    {
+      // Track only the composition — not selection, not isDirty, not actions.
+      partialize: (state): TrackedComposition => ({
+        canvas: state.canvas,
+        layers: state.layers,
+      }),
+      // Shallow ref-equality on the tracked slice. Every store action produces
+      // a NEW `layers` array (via .map()/.filter()/spread), so a changed
+      // composition is always detected; a no-op set returns the same ref and
+      // is correctly deduped. (Deep equality would also work but is needless
+      // work given the store's immutable-update style.)
+      equality: (a, b) => a.canvas === b.canvas && a.layers === b.layers,
+      limit: HISTORY_LIMIT,
+    },
+  ),
+)

@@ -25,6 +25,7 @@ import type {
   DistributeAxis,
 } from '../../canvas/align'
 import type { Layer } from '../../types/layer'
+import { isLayerDistorted } from './transformValidation'
 
 /** Geometry of the alignment-bar drawn inside a 16x16 icon, per target. */
 const BAR_GEOM: Record<AlignTarget, { x: number; y: number; w: number; h: number }> = {
@@ -116,6 +117,33 @@ function DistributeIcon({ axis }: { axis: DistributeAxis }) {
   )
 }
 
+/** A rect leaning back toward its natural ratio (diagonal slash = "reset"). */
+function ResetAspectIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect
+        x="2.75"
+        y="4.75"
+        width="10.5"
+        height="6.5"
+        rx="1"
+        stroke="currentColor"
+        strokeOpacity="0.55"
+        strokeWidth="1.1"
+      />
+      <line
+        x1="3.75"
+        y1="11.75"
+        x2="12.25"
+        y2="4.25"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 interface ToolButtonProps {
   label: string
   testId: string
@@ -175,24 +203,28 @@ export function AlignmentToolbar() {
   const updateLayersTransform = useCompositionStore(
     (s) => s.updateLayersTransform,
   )
+  const resetLayersAspect = useCompositionStore((s) => s.resetLayersAspect)
 
   if (!canvas) return null
 
   // Resolve selected non-base layers to alignment rects.
-  const rects: AlignRect[] = selectedLayerIds
+  const selectedOverlays = selectedLayerIds
     .map((id) => layers.find((l) => l.id === id))
     .filter((l): l is Layer => Boolean(l))
     .filter((l) => !l.isBaseImage)
-    .map((l) => ({
-      id: l.id,
-      x: l.x,
-      y: l.y,
-      width: l.width,
-      height: l.height,
-    }))
+  const rects: AlignRect[] = selectedOverlays.map((l) => ({
+    id: l.id,
+    x: l.x,
+    y: l.y,
+    width: l.width,
+    height: l.height,
+  }))
 
   if (rects.length === 0) return null
   const n = rects.length
+  // Any selected overlay whose rendered ratio drifts from its source can be
+  // reverted; the button is inert when every selection already matches.
+  const anyDistorted = selectedOverlays.some(isLayerDistorted)
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm">
@@ -240,6 +272,21 @@ export function AlignmentToolbar() {
             <DistributeIcon axis={axis} />
           </ToolButton>
         ))}
+      </Group>
+
+      {/* Revert each selected layer to its source aspect ratio (hold width,
+          recenter). Inert when every selection already matches its natural
+          ratio — rare for drag-resized layers (corners preserve ratio), common
+          after typing in the W/H fields. */}
+      <Group legend="Reset" min={1} count={n}>
+        <ToolButton
+          label="Reset aspect ratio"
+          testId="reset-aspect"
+          disabled={!anyDistorted}
+          onClick={() => resetLayersAspect(selectedOverlays.map((l) => l.id))}
+        >
+          <ResetAspectIcon />
+        </ToolButton>
       </Group>
     </div>
   )

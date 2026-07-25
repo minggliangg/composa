@@ -8,6 +8,8 @@
 import { useCallback, useRef } from 'react'
 import type { RefObject, PointerEvent } from 'react'
 import { useCompositionStore } from '../state/compositionStore'
+import type { TrackedComposition } from '../state/compositionStore'
+import { beginGesture, commitGesture } from '../state/useTemporalStore'
 import { screenToCanvas } from './coords'
 import { applyResize } from './resize'
 import type { ResizeHandleId, ResizeStart } from './resize'
@@ -32,6 +34,9 @@ interface ResizeGesture {
   pointerId: number
   handle: ResizeHandleId
   start: ResizeStart
+  /** Pre-gesture composition snapshot — the whole resize collapses to ONE undo
+   *  step via commitGesture on pointer-up. */
+  historySnapshot: TrackedComposition
 }
 
 export function ResizeHandle({
@@ -71,6 +76,9 @@ export function ResizeHandle({
           naturalWidth: layer.naturalWidth,
           naturalHeight: layer.naturalHeight,
         },
+        // Snapshot before the first move + pause history so the burst of
+        // per-move resize writes collapses to one undo step on pointer-up.
+        historySnapshot: beginGesture(),
       }
       e.currentTarget.setPointerCapture(e.pointerId)
     },
@@ -99,6 +107,9 @@ export function ResizeHandle({
     } catch {
       // Capture may already be gone; gesture already cleared.
     }
+    // Collapse the whole resize into a single undo step (no-op if the pointer
+    // never moved).
+    commitGesture(g.historySnapshot)
   }, [])
 
   const half = size / 2

@@ -3,3 +3,32 @@
 :root {
   color-scheme: dark;
 }
+
+/*
+ * Save-status pulse for the "composa." wordmark. The logo's trailing period IS
+ * the indicator: when the composition is dirty it gets a gentle opacity + scale
+ * pulse so the change is noticeable without an alarm banner. Reduced-motion
+ * users still get the color change, just without motion.
+ */
+@keyframes composa-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.3);
+  }
+}
+
+.status-pulse {
+  transform-origin: center;
+  animation: composa-status-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-pulse {
+    animation: none;
+  }
+}

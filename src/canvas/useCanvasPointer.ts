@@ -24,6 +24,8 @@ import { useCallback, useRef } from 'react'
 import type { RefObject, PointerEvent } from 'react'
 import type { Layer } from '../types/layer'
 import { useCompositionStore } from '../state/compositionStore'
+import type { TrackedComposition } from '../state/compositionStore'
+import { beginGesture, commitGesture } from '../state/useTemporalStore'
 import { selectionModeFromEvent } from '../state/selection'
 import { screenToCanvas } from './coords'
 import type { CanvasPoint } from './coords'
@@ -54,6 +56,9 @@ interface DragState {
   pointerId: number
   startPointer: CanvasPoint
   layers: DragLayer[]
+  /** Pre-gesture composition snapshot, captured on pointer-down so the whole
+   *  drag collapses to ONE undo step on pointer-up (see commitGesture). */
+  historySnapshot: TrackedComposition
 }
 
 export interface CanvasPointerHandlers {
@@ -104,6 +109,10 @@ export function useCanvasPointer(
         pointerId: e.pointerId,
         startPointer: screenToCanvas(svg, e.clientX, e.clientY),
         layers: movers,
+        // Snapshot the composition now (before the first move) and pause history
+        // so the burst of per-move writes doesn't flood undo. pointer-up commits
+        // the net change as a single entry.
+        historySnapshot: beginGesture(),
       }
       e.currentTarget.setPointerCapture(e.pointerId)
     },
@@ -141,6 +150,9 @@ export function useCanvasPointer(
       // Release can throw if capture was already lost (e.g. pointercancel
       // fired first); safe to ignore — the gesture is already cleared.
     }
+    // Collapse the whole drag into a single undo step. If the pointer never
+    // moved, commitGesture detects the no-op and records nothing.
+    commitGesture(d.historySnapshot)
   }, [])
 
   return {

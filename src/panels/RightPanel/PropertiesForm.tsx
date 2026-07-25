@@ -19,7 +19,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { Layer } from '../../types/layer'
 import { useCompositionStore } from '../../state/compositionStore'
 import { MIN_LAYER_SIZE } from '../../canvas/resize'
-import { clampTransformValue, parseLayerNumber } from './transformValidation'
+import {
+  clampTransformValue,
+  isLayerDistorted,
+  parseLayerNumber,
+} from './transformValidation'
 
 type Field = 'x' | 'y' | 'width' | 'height'
 
@@ -71,6 +75,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
     (s) => s.updateLayerTransform,
   )
   const updateLayerOpacity = useCompositionStore((s) => s.updateLayerOpacity)
+  const resetLayersAspect = useCompositionStore((s) => s.resetLayersAspect)
 
   // Local string drafts for the four inputs.
   const [drafts, setDrafts] = useState<Record<Field, string>>({
@@ -192,6 +197,19 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
             </label>
           ))}
         </div>
+        {/* Disabled when the layer already matches its natural aspect. Base
+            images can't be distorted through the canvas (drag-resize preserves
+            ratio), so this mostly undoes typed W/H distortions. */}
+        <button
+          type="button"
+          onClick={() => resetLayersAspect([layer.id])}
+          disabled={!isLayerDistorted(layer)}
+          title="Restore the layer to its source aspect ratio (hold width, recenter)"
+          className="self-start rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-slate-800"
+          data-testid="properties-reset-aspect"
+        >
+          Reset aspect
+        </button>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">

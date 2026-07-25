@@ -7,6 +7,25 @@
  * resize use, so these helpers are the only thing standing between raw text and
  * the store — they must never let NaN or a sub-floor size through.
  */
+import type { Layer } from '../../types/layer'
+
+/** Relative tolerance for treating a layer's current ratio as matching its
+ *  natural aspect. Pixel-level drift from the half-pixel grid (e.g. width 200.5
+ *  vs natural 200) shouldn't keep the "Reset aspect" button lit forever. */
+export const ASPECT_EPSILON = 0.001
+
+/**
+ * Has a layer's rendered aspect ratio drifted from its source? Drag-resize
+ * already preserves ratio (corner handles derive height from the natural
+ * aspect), so distortion is only reachable through the numeric W/H fields.
+ * The reset button stays inert when the layer is already at its natural ratio.
+ */
+export function isLayerDistorted(layer: Layer): boolean {
+  if (layer.naturalWidth <= 0 || layer.naturalHeight <= 0) return false
+  const naturalRatio = layer.naturalWidth / layer.naturalHeight
+  const currentRatio = layer.width / layer.height
+  return Math.abs(currentRatio - naturalRatio) > ASPECT_EPSILON
+}
 
 /**
  * Parse a raw text input into a finite number, returning `null` for empty or
