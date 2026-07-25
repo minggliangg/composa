@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>composa.</title>
+    <!--
+      Pre-paint theme bootstrap. Runs synchronously in <head> before the first
+      paint so the correct theme (and `color-scheme`) is applied immediately —
+      no flash of the wrong theme. Decision order: saved preference in
+      localStorage('composa-theme'), else the OS `prefers-color-scheme`, else
+      dark (the tool's native look). The same source-of-truth is mirrored in
+      src/state/theme.ts; keep them in sync.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('composa-theme');
+          var prefersLight = window.matchMedia(
+            '(prefers-color-scheme: light)',
+          ).matches;
+          var dark = saved ? saved === 'dark' : !prefersLight;
+          document.documentElement.classList.toggle('dark', dark);
+        } catch {
+          // localStorage may be unavailable (private mode, etc.) — fall back to
+          // the no-class (light) default rather than throw.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -48,7 +48,7 @@ export function PropertiesForm() {
 
   if (!layer) {
     return (
-      <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">
+      <div className="rounded-md border border-border bg-raised/50 p-3 text-sm text-fg-muted">
         select a layer to edit its properties
       </div>
     )
@@ -139,13 +139,13 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm">
+    <div className="flex flex-col gap-3 rounded-md border border-border bg-raised/50 p-3 text-sm">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
           Filename
         </span>
         <span
-          className="break-all font-medium text-slate-200"
+          className="break-all font-medium text-fg"
           title={layer.originalFilename}
           data-testid="properties-filename"
         >
@@ -155,7 +155,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
 
       {selectedCount > 1 && (
         <p
-          className="rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-200"
+          className="rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-xs text-fg-muted"
           data-testid="properties-multi-select-note"
         >
           {selectedCount} layers selected — these inputs edit this layer; use
@@ -164,16 +164,16 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
       )}
 
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
           Natural size
         </span>
-        <span className="text-slate-300" data-testid="properties-natural-size">
+        <span className="text-fg" data-testid="properties-natural-size">
           {layer.naturalWidth} × {layer.naturalHeight}px
         </span>
       </div>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
           Transform
         </legend>
         <div className="grid grid-cols-2 gap-2">
@@ -183,7 +183,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
               className="flex flex-col gap-1"
               data-testid={`properties-field-${key}`}
             >
-              <span className="text-xs text-slate-500">{label}</span>
+              <span className="text-xs text-fg-muted">{label}</span>
               <input
                 type="number"
                 step={0.5}
@@ -191,7 +191,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
                 onChange={(e) => handleChange(key, e.target.value)}
                 onFocus={() => handleFocus(key)}
                 onBlur={() => handleBlur(key)}
-                className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="rounded-md border border-border bg-raised px-2 py-1 text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                 data-testid={`properties-input-${key}`}
               />
             </label>
@@ -205,7 +205,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
           onClick={() => resetLayersAspect([layer.id])}
           disabled={!isLayerDistorted(layer)}
           title="Restore the layer to its source aspect ratio (hold width, recenter)"
-          className="self-start rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-slate-800"
+          className="self-start rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-fg transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-raised"
           data-testid="properties-reset-aspect"
         >
           Reset aspect
@@ -213,7 +213,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
           Opacity
         </legend>
         <label
@@ -229,17 +229,17 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
             onChange={(e) =>
               updateLayerOpacity(layer.id, Number(e.target.value) / 100)
             }
-            className="h-1.5 w-full flex-1 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
+            className="h-1.5 w-full flex-1 cursor-pointer appearance-none rounded-full bg-border accent-[var(--primary)]"
             data-testid="properties-input-opacity"
           />
-          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-400">
+          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-fg-muted">
             {Math.round(layer.opacity * 100)}%
           </span>
         </label>
       </fieldset>
 
       {layer.isBaseImage && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-fg-muted">
           The base image sets the canvas size and fills it exactly.
         </p>
       )}

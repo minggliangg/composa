@@ -103,7 +103,7 @@ function computeOverlayPlacement(
 }
 
 const DROP_AREA_CLASS =
-  'flex cursor-pointer flex-col gap-0.5 rounded-md border border-dashed border-slate-700 bg-slate-800/60 p-3 text-center transition-colors hover:border-slate-500 hover:bg-slate-800'
+  'flex cursor-pointer flex-col gap-0.5 rounded-md border border-dashed border-border-strong bg-raised p-3 text-center transition-colors hover:border-accent hover:bg-raised-hover'
 
 /**
  * Base + overlay upload dropzone. Each labeled area is a `<label>` wrapping a
@@ -298,8 +298,8 @@ export function UploadDropzone() {
             }
           }}
         />
-        <span className="text-sm font-medium text-slate-200">Base image</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-sm font-medium text-fg">Base image</span>
+        <span className="text-xs text-fg-muted">
           click or drop one image — sets canvas size
         </span>
       </label>
@@ -325,8 +325,8 @@ export function UploadDropzone() {
             }
           }}
         />
-        <span className="text-sm font-medium text-slate-200">Overlays</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-sm font-medium text-fg">Overlays</span>
+        <span className="text-xs text-fg-muted">
           {hasBase
             ? 'click or drop — stack above the base'
             : 'upload a base image first'}
@@ -335,7 +335,7 @@ export function UploadDropzone() {
 
       {isProcessing && (
         <p
-          className="text-xs text-slate-500"
+          className="text-xs text-fg-muted"
           aria-live="polite"
           data-testid="upload-processing"
         >
@@ -344,11 +344,11 @@ export function UploadDropzone() {
       )}
 
       {errors.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded-md border border-red-900/60 bg-red-950/40 p-2 text-xs text-red-300">
+        <ul className="flex flex-col gap-1 rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-danger-fg">
           {errors.map((err, i) => (
             <li key={`${err.filename}-${i}`}>
               <span className="font-medium">{err.filename}</span>
-              <span className="text-red-400"> — {err.reason}</span>
+              <span className="text-danger"> — {err.reason}</span>
             </li>
           ))}
         </ul>

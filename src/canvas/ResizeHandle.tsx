@@ -119,8 +119,8 @@ export function ResizeHandle({
       y={cy - half}
       width={size}
       height={size}
-      fill="#ffffff"
-      stroke="#2563eb"
+      fill="var(--surface)"
+      stroke="var(--accent)"
       // Constant screen-pixel stroke regardless of viewBox scale (matches the
       // selection outline + export-crop boundary).
       vectorEffect="non-scaling-stroke"

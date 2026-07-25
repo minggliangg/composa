@@ -161,7 +161,7 @@ function ToolButton({ label, testId, disabled, onClick, children }: ToolButtonPr
       disabled={disabled}
       onClick={onClick}
       data-testid={testId}
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-slate-300 transition-colors hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:text-slate-600 disabled:hover:bg-transparent"
+      className="flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -183,10 +183,10 @@ function Group({
   const enabled = count >= min
   return (
     <fieldset className="flex flex-col gap-1" disabled={!enabled}>
-      <legend className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <legend className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-muted">
         {legend}
         {!enabled && (
-          <span className="font-normal normal-case text-slate-600">
+          <span className="font-normal normal-case text-fg-subtle">
             (needs {min}+)
           </span>
         )}
@@ -227,7 +227,7 @@ export function AlignmentToolbar() {
   const anyDistorted = selectedOverlays.some(isLayerDistorted)
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-slate-800 bg-slate-900/60 p-3 text-sm">
+    <div className="flex flex-col gap-3 rounded-md border border-border bg-raised/50 p-3 text-sm">
       <Group legend="Align to canvas" min={1} count={n}>
         {CANVAS_TARGETS.map(({ target, label }) => (
           <ToolButton

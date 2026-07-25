@@ -40,10 +40,10 @@ export function CompositionCanvas() {
     return (
       <section
         aria-label="Composition canvas"
-        className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-dashed border-slate-700 bg-slate-950 p-4"
+        className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-dashed border-border-strong bg-bg p-4"
       >
-        <div className="text-center text-sm text-slate-500">
-          <p className="font-medium text-slate-400">composition canvas (empty)</p>
+        <div className="text-center text-sm text-fg-muted">
+          <p className="font-medium text-fg-subtle">composition canvas (empty)</p>
           <p className="mt-1">upload a base image to begin</p>
         </div>
       </section>
@@ -59,7 +59,7 @@ export function CompositionCanvas() {
       // `overflow-visible` + the svg's own `overflow="visible"` let a layer
       // dragged partly off-canvas render beyond the canvas boundary in the
       // editor (the root app shell still clips at the window).
-      className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-slate-800 bg-slate-950 p-4 shadow-inner"
+      className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-border bg-bg p-4 shadow-inner"
     >
       <svg
         ref={svgRef}
@@ -104,7 +104,7 @@ export function CompositionCanvas() {
           width={canvas.width}
           height={canvas.height}
           fill="none"
-          stroke="#334155"
+          stroke="var(--border-strong)"
           strokeDasharray="6 4"
           // Constant screen-pixel stroke regardless of the viewBox scale, so the
           // boundary is equally visible on a 200px and a 12000px canvas.

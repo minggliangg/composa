@@ -98,7 +98,7 @@ export function ConfirmDialog({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel()
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/70 p-4 backdrop-blur-sm"
       data-testid="confirm-dialog-backdrop"
     >
       <div
@@ -108,18 +108,18 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
         onKeyDown={onKeyDown}
-        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-border bg-surface p-5 shadow-2xl [animation:composa-dialog-in_0.14s_ease-out]"
         data-testid="confirm-dialog"
       >
         <h2
           id="confirm-dialog-title"
-          className="text-base font-semibold text-slate-100"
+          className="text-base font-semibold text-fg"
         >
           {title}
         </h2>
         <p
           id="confirm-dialog-message"
-          className="text-sm text-slate-400"
+          className="text-sm text-fg-muted"
         >
           {message}
         </p>
@@ -128,7 +128,7 @@ export function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500"
+            className="rounded-md border border-border bg-raised px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-raised-hover focus:outline-none focus:ring-2 focus:ring-accent"
             data-testid="confirm-cancel"
           >
             {cancelLabel}
@@ -139,8 +139,8 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className={
               destructive
-                ? 'rounded-md border border-red-600 bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-400'
-                : 'rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400'
+                ? 'rounded-md border border-danger bg-danger px-3 py-1.5 text-sm font-medium text-danger-fg transition-colors hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-danger'
+                : 'rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-accent'
             }
             data-testid="confirm-confirm"
           >

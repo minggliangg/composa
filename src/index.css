@@ -1,14 +1,129 @@
 @import "tailwindcss";
 
+/*
+ * Class-driven dark mode. Tailwind v4 defaults to `prefers-color-scheme`, but
+ * we drive the theme from a `.dark` class on <html> (set by the pre-paint
+ * script in index.html + src/state/theme.ts) so the toggle works regardless of
+ * the OS setting. `:where()` keeps specificity at zero so the variant never
+ * accidentally outranks author styles.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic color tokens. Each token has a light value (under :root) and a dark
+ * value (under .dark). The @theme inline block below maps them into Tailwind's
+ * color namespace so utilities like `bg-surface`, `text-fg`, `border-border`,
+ * `bg-primary`, `ring-accent` resolve to LIVE references (inline = the utility
+ * emits `background-color: var(--surface)` rather than copying the value at
+ * build time) — which is what lets every utility flip automatically when the
+ * .dark class toggles.
+ *
+ * Palette: emerald/teal accent on layered neutrals. Hex shown for legibility
+ * during review; values are the same perceptual family in both themes.
+ */
 :root {
+  --bg: #f7f8f7; /* app canvas behind everything */
+  --surface: #ffffff; /* panels, dialog */
+  --raised: #eef1ef; /* layer rows, inputs, raised cards */
+  --raised-hover: #e4e8e5; /* hover state for raised */
+  --border: #dfe3df; /* default borders */
+  --border-strong: #c7cdc8; /* emphasis borders (dropzones) */
+  --fg: #0f1714; /* primary text */
+  --fg-muted: #5b6661; /* secondary text, hints */
+  --fg-subtle: #8a948f; /* captions, "base" tag */
+  --primary: #059669; /* primary actions, selection bg (emerald-600) */
+  --primary-strong: #10b981; /* hover/active (emerald-500) */
+  --primary-fg: #ffffff; /* text on primary */
+  --accent: #0d9488; /* selection ring, focus ring, links (teal-600) */
+  --danger: #e11d48; /* destructive hover/focus (rose-600) */
+  --danger-fg: #ffffff; /* destructive button text */
+  --warn: #d97706; /* save-status dot (amber-600) */
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #08100d;
+  --surface: #0f1714;
+  --raised: #16211c;
+  --raised-hover: #1c2a23;
+  --border: #1f2e27;
+  --border-strong: #2c3d35;
+  --fg: #e6ece8;
+  --fg-muted: #9aa8a0;
+  --fg-subtle: #6b7872;
+  --primary: #10b981; /* emerald-500 */
+  --primary-strong: #34d399; /* emerald-400 */
+  --primary-fg: #04130d;
+  --accent: #2dd4bf; /* teal-400 */
+  --danger: #fb7185; /* rose-400 */
+  --danger-fg: #fecdd3; /* rose-200 */
+  --warn: #fbbf24; /* amber-400 */
   color-scheme: dark;
+}
+
+/*
+ * Map each semantic var into Tailwind's color namespace. `inline` is the key
+ * word: it makes `bg-surface` emit `background-color: var(--surface)` (a live
+ * reference) rather than copying the resolved value at build time, so the
+ * utility tracks the theme switch with no rebuild.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-raised-hover: var(--raised-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-fg: var(--primary-fg);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+  --color-warn: var(--warn);
+}
+
+/*
+ * Refined base layer. The font stack and tighter default radius give the tool a
+ * slightly more polished feel without changing any layout; the selection color
+ * and custom scrollbars reinforce the emerald identity in both themes.
+ */
+@layer base {
+  html {
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklch, var(--accent) 30%, transparent);
+  }
+
+  /* Emerald-tinted scrollbars. `color-mix` lets one rule serve both themes. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--fg-muted) 35%, transparent)
+      transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--fg-muted) 35%, transparent);
+    border-radius: 9999px;
+  }
 }
 
 /*
  * Save-status pulse for the "composa." wordmark. The logo's trailing period IS
  * the indicator: when the composition is dirty it gets a gentle opacity + scale
  * pulse so the change is noticeable without an alarm banner. Reduced-motion
- * users still get the color change, just without motion.
+ * users still get the color change, just without motion. The color itself is
+ * set by a utility class on the same element (text-warn when dirty).
  */
 @keyframes composa-status-pulse {
   0%,
@@ -27,8 +142,26 @@
   animation: composa-status-pulse 1.6s ease-in-out infinite;
 }
 
+/*
+ * Subtle scale-in for the shared ConfirmDialog — a small ease-out pop so the
+ * modal feels responsive without being flashy. Reduced-motion users skip it.
+ */
+@keyframes composa-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-pulse {
     animation: none;
+  }
+  [animation^='composa-dialog-in'] {
+    animation: none !important;
   }
 }

@@ -10,9 +10,9 @@ import { RightPanel } from './panels/RightPanel/RightPanel'
  */
 function App() {
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-fg">
       <TopBar />
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 md:flex-row">
         <LeftPanel />
         <CompositionCanvas />
         <RightPanel />

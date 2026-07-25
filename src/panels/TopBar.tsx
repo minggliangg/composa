@@ -35,6 +35,7 @@ import { useTemporalStore, undo, redo } from '../state/useTemporalStore'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { exportComposition } from '../export/exportComposition'
 import { wasmErrorMessage } from '../upload/errorMessages'
+import { toggleTheme, useTheme } from '../state/theme'
 
 export function TopBar() {
   const layers = useCompositionStore((s) => s.layers)
@@ -54,6 +55,7 @@ export function TopBar() {
 
   const hasBase = layers.some((l) => l.isBaseImage)
   const hasLayers = layers.length > 0
+  const theme = useTheme()
 
   // Global undo/redo shortcuts. Ignore when focus is in an editable control so
   // typing in the properties form (or any input/textarea/contentEditable) isn't
@@ -132,9 +134,9 @@ export function TopBar() {
   }
 
   return (
-    <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-3 text-slate-100 shadow-sm">
+    <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3.5 text-fg shadow-sm">
       <div
-        className="group relative flex w-max items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-600"
+        className="group relative flex w-max items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         tabIndex={0}
         data-testid="save-status"
         role="img"
@@ -144,14 +146,16 @@ export function TopBar() {
             : 'composa — up to date.'
         }
       >
-        <span className="text-lg font-semibold tracking-tight text-white">
+        <span className="text-lg font-semibold tracking-tight text-fg">
           composa
+          {/* The trailing period IS the save-status indicator: emerald when
+              clean, warn-amber with a gentle pulse when dirty. */}
           <span
             aria-hidden="true"
             data-testid="save-status-dot"
             className={
               'inline-block transition-colors duration-300 ' +
-              (isDirty ? 'text-amber-400 status-pulse' : 'text-slate-500')
+              (isDirty ? 'text-warn status-pulse' : 'text-primary')
             }
           >
             .
@@ -159,7 +163,7 @@ export function TopBar() {
         </span>
         <span
           role="tooltip"
-          className="pointer-events-none absolute left-0 top-full z-50 mt-2 block w-max max-w-[15rem] rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200 opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0"
+          className="pointer-events-none absolute left-0 top-full z-50 mt-2 block w-max max-w-[15rem] rounded-md border border-border bg-raised px-2.5 py-1.5 text-xs text-fg-muted opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0"
         >
           {isDirty
             ? 'Unsaved changes — Export to keep your work'
@@ -178,7 +182,7 @@ export function TopBar() {
             disabled={!canUndo}
             title={canUndo ? 'Undo (⌘Z)' : 'Nothing to undo'}
             aria-label="Undo"
-            className="rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-transparent disabled:text-slate-600"
+            className="rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
             data-testid="undo-button"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -192,7 +196,7 @@ export function TopBar() {
             disabled={!canRedo}
             title={canRedo ? 'Redo (⌘⇧Z)' : 'Nothing to redo'}
             aria-label="Redo"
-            className="rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-transparent disabled:text-slate-600"
+            className="rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
             data-testid="redo-button"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -202,6 +206,45 @@ export function TopBar() {
           </button>
         </div>
 
+        {/* Dark/light toggle. The active theme is driven from theme.ts (which
+            mirrors the .dark class on <html>); the click flips it and persists
+            to localStorage. Icon swaps sun<->moon to match. */}
+        <button
+          type="button"
+          onClick={() => toggleTheme()}
+          aria-label={
+            theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+          }
+          title={
+            theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+          }
+          className="rounded-md border border-border bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+          data-testid="theme-toggle"
+        >
+          {theme === 'dark' ? (
+            // Sun icon (shown in dark mode → click to go light)
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
+              <path
+                d="M8 1.5v1.5M8 13v1.5M1.5 8h1.5M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            // Moon icon (shown in light mode → click to go dark)
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M13.5 9.2A5.5 5.5 0 0 1 6.8 2.5a.6.6 0 0 0-.8-.7 6.5 6.5 0 1 0 8.2 8.2.6.6 0 0 0-.7-.8Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </button>
+
         <div className="flex flex-col items-end gap-1">
           <button
             type="button"
@@ -209,14 +252,14 @@ export function TopBar() {
             disabled={!hasBase || exporting}
             title={exporting ? 'Exporting…' : 'Export composition as SVG'}
             aria-label="Export SVG"
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg shadow-sm shadow-emerald-500/20 transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-subtle disabled:shadow-none"
             data-testid="export-button"
           >
             {exporting ? 'Exporting…' : 'Export'}
           </button>
           {exportError && (
             <span
-              className="max-w-[16rem] text-[11px] text-red-300"
+              className="max-w-[16rem] text-[11px] text-danger"
               data-testid="export-error"
             >
               {exportError}
@@ -230,7 +273,7 @@ export function TopBar() {
           disabled={!hasLayers}
           title="Clear the composition"
           aria-label="Reset composition"
-          className="rounded-md border border-red-900 bg-red-950/60 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-900/70 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-transparent disabled:text-slate-600"
+          className="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
           data-testid="reset-button"
         >
           Reset

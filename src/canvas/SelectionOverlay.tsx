@@ -85,7 +85,7 @@ export function SelectionOverlay({ svgRef }: SelectionOverlayProps) {
           width={layer.width}
           height={layer.height}
           fill="none"
-          stroke="#2563eb"
+          stroke="var(--accent)"
           // Constant screen-pixel stroke regardless of viewBox scale (same trick
           // as the export-crop boundary), so the outline stays a crisp thin line
           // on both a 200px and a 12000px canvas.
