@@ -110,7 +110,10 @@ export function ResizeHandle({
       height={size}
       fill="#ffffff"
       stroke="#2563eb"
-      strokeWidth={Math.max(1, size * 0.1)}
+      // Constant screen-pixel stroke regardless of viewBox scale (matches the
+      // selection outline + export-crop boundary).
+      vectorEffect="non-scaling-stroke"
+      strokeWidth={1.25}
       style={{ cursor }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

@@ -33,7 +33,7 @@ import { SelectionOverlay } from './SelectionOverlay'
 export function CompositionCanvas() {
   const canvas = useCompositionStore((s) => s.canvas)
   const layers = useCompositionStore((s) => s.layers)
-  const selectLayer = useCompositionStore((s) => s.selectLayer)
+  const clearSelection = useCompositionStore((s) => s.clearSelection)
   const svgRef = useRef<SVGSVGElement>(null)
 
   if (!canvas) {
@@ -87,7 +87,7 @@ export function CompositionCanvas() {
           width={canvas.width}
           height={canvas.height}
           className="fill-white"
-          onPointerDown={() => selectLayer(null)}
+          onPointerDown={() => clearSelection()}
         />
         {sortedLayers.map((layer) => (
           <LayerImage key={layer.id} layer={layer} svgRef={svgRef} />

@@ -12,6 +12,8 @@
  */
 import type { DragEvent } from 'react'
 import type { Layer } from '../../types/layer'
+import type { SelectionMode } from '../../state/selection'
+import { selectionModeFromEvent } from '../../state/selection'
 
 export interface LayerListItemProps {
   layer: Layer
@@ -25,8 +27,8 @@ export interface LayerListItemProps {
   listLength: number
   /** True if another row is currently being dragged over this one. */
   isDropTarget: boolean
-  /** Click selects the layer. */
-  onSelect: () => void
+  /** Click selects the layer; the mode (replace/toggle) comes from modifiers. */
+  onSelect: (mode: SelectionMode) => void
   /** Request deletion (opens the shared confirm). Disabled for the base. */
   onRequestDelete: () => void
   /** Move one slot up in the displayed list (toward front / higher z-index). */
@@ -75,7 +77,7 @@ export function LayerListItem({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragLeave={onDragLeave}
-      onClick={onSelect}
+      onClick={(e) => onSelect(selectionModeFromEvent(e))}
       data-layer-id={layer.id}
       data-testid="layer-item"
       data-selected={selected ? 'true' : 'false'}

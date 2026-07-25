@@ -77,7 +77,7 @@ const FIXED_STATE: CompositionState = {
       isBaseImage: false,
     }),
   ],
-  selectedLayerId: 'overlay-1',
+  selectedLayerIds: ['overlay-1'],
   isDirty: true,
 }
 
@@ -265,7 +265,7 @@ describe('buildSvgDocument', () => {
     const emptyState: CompositionState = {
       canvas: null,
       layers: [],
-      selectedLayerId: null,
+      selectedLayerIds: [],
       isDirty: false,
     }
     expect(() => buildSvgDocument(emptyState, {}, FIXED_OPTS)).toThrow(

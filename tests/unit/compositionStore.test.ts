@@ -84,7 +84,7 @@ describe('compositionStore', () => {
     expect(base.y).toBe(0)
     expect(base.width).toBe(800)
     expect(base.height).toBe(600)
-    expect(state.selectedLayerId).toBe(base.id)
+    expect(state.selectedLayerIds).toEqual([base.id])
     expect(state.isDirty).toBe(true)
   })
 
@@ -119,15 +119,92 @@ describe('compositionStore', () => {
     expect(state.layers[0].isBaseImage).toBe(true)
   })
 
-  it('selectLayer sets and clears selectedLayerId', () => {
+  it('selectLayer sets and clears the selection', () => {
     store().setBaseImage(makeBaseLayer(800, 600))
     const base = useCompositionStore.getState().layers[0]
 
     store().selectLayer(null)
-    expect(useCompositionStore.getState().selectedLayerId).toBeNull()
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([])
 
     store().selectLayer(base.id)
-    expect(useCompositionStore.getState().selectedLayerId).toBe(base.id)
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([base.id])
+  })
+
+  it('selectLayer replace keeps an existing selection when clicking a member', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const o1 = makeOverlayLayer('o1.png', 0, 0)
+    const o2 = makeOverlayLayer('o2.png', 24, 24)
+    store().addOverlay(o1)
+    store().addOverlay(o2)
+    // addOverlay selects each new overlay, so start from a clean slate before
+    // building a known multi-selection.
+    store().selectLayer(null)
+    store().selectLayer(o1.id, 'toggle')
+    store().selectLayer(o2.id, 'toggle')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([
+      o1.id,
+      o2.id,
+    ])
+
+    // Plain (replace) click on o1 — already selected — keeps the group.
+    store().selectLayer(o1.id, 'replace')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([
+      o1.id,
+      o2.id,
+    ])
+  })
+
+  it('selectLayer toggle adds and removes; add is idempotent', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const o1 = makeOverlayLayer('o1.png', 0, 0)
+    const o2 = makeOverlayLayer('o2.png', 24, 24)
+    store().addOverlay(o1)
+    store().addOverlay(o2)
+    store().selectLayer(null)
+
+    store().selectLayer(o1.id, 'toggle')
+    store().selectLayer(o2.id, 'toggle')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([
+      o1.id,
+      o2.id,
+    ])
+
+    // toggle off
+    store().selectLayer(o1.id, 'toggle')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([o2.id])
+
+    // add is idempotent
+    store().selectLayer(o2.id, 'add')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([o2.id])
+    store().selectLayer(o1.id, 'add')
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([
+      o2.id,
+      o1.id,
+    ])
+  })
+
+  it('updateLayersTransform moves multiple layers in one update (group drag)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const o1 = makeOverlayLayer('o1.png', 10, 10)
+    const o2 = makeOverlayLayer('o2.png', 50, 50)
+    store().addOverlay(o1)
+    store().addOverlay(o2)
+    useCompositionStore.setState({ isDirty: false })
+
+    store().updateLayersTransform([
+      { id: o1.id, patch: { x: 12.3, y: 7.6 } },
+      { id: o2.id, patch: { x: 52.1, y: 49.4 } },
+    ])
+
+    const layers = useCompositionStore.getState().layers
+    const a = layers.find((l) => l.id === o1.id)
+    const b = layers.find((l) => l.id === o2.id)
+    // Both moved, both snapped to the half-pixel grid, isDirty flipped.
+    expect(a?.x).toBe(12.5)
+    expect(a?.y).toBe(7.5)
+    expect(b?.x).toBe(52)
+    expect(b?.y).toBe(49.5)
+    expect(useCompositionStore.getState().isDirty).toBe(true)
   })
 
   it('updateLayerTransform merges the patch and leaves other fields untouched', () => {
@@ -186,13 +263,15 @@ describe('compositionStore', () => {
       .layers.find((l) => !l.isBaseImage)
 
     // addOverlay selects the new overlay.
-    expect(useCompositionStore.getState().selectedLayerId).toBe(overlay?.id)
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([
+      overlay?.id,
+    ])
 
     store().deleteLayer(overlay!.id)
     const state = useCompositionStore.getState()
 
     expect(state.layers.find((l) => l.id === overlay!.id)).toBeUndefined()
-    expect(state.selectedLayerId).toBeNull()
+    expect(state.selectedLayerIds).toEqual([])
     expect(state.isDirty).toBe(true)
   })
 
@@ -205,7 +284,7 @@ describe('compositionStore', () => {
       .layers.filter((l) => !l.isBaseImage)
     // o2 is selected (most recent addOverlay).
     store().deleteLayer(o1.id)
-    expect(useCompositionStore.getState().selectedLayerId).toBe(o2.id)
+    expect(useCompositionStore.getState().selectedLayerIds).toEqual([o2.id])
   })
 
   it('resetComposition clears canvas, layers, selection and isDirty', () => {
@@ -216,7 +295,7 @@ describe('compositionStore', () => {
     const state = useCompositionStore.getState()
     expect(state.canvas).toBeNull()
     expect(state.layers).toEqual([])
-    expect(state.selectedLayerId).toBeNull()
+    expect(state.selectedLayerIds).toEqual([])
     expect(state.isDirty).toBe(false)
   })
 

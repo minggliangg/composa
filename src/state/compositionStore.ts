@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { CompositionState, Layer } from '../types/layer'
+import type { SelectionMode } from './selection'
+import { quantizePatch } from '../canvas/quantize'
 
 /**
  * Zustand composition store — the single source of truth every UI surface reads
@@ -11,21 +13,33 @@ import type { CompositionState, Layer } from '../types/layer'
  * transform updates that arrive in Phase 04+.
  */
 
+/** A transform patch bound to the layer it applies to (used by the batch action). */
+export interface LayerTransformUpdate {
+  id: string
+  patch: Partial<Pick<Layer, 'x' | 'y' | 'width' | 'height'>>
+}
+
 export interface CompositionStore extends CompositionState {
   /** Set/replace the base image. Canvas adopts the base's natural pixel size. */
   setBaseImage: (layer: Layer) => void
   /** Append an overlay; assigns the next dense z-index so it paints on top. */
   addOverlay: (layer: Layer) => void
-  /** Set the selected layer id (or null to clear). */
-  selectLayer: (id: string | null) => void
-  /** Merge a partial transform patch into a layer; the seam all transforms use. */
+  /** Mutate the selection. `id` null clears it; mode controls add/toggle/replace. */
+  selectLayer: (id: string | null, mode?: SelectionMode) => void
+  /** Clear the selection entirely. */
+  clearSelection: () => void
+  /** Merge a partial transform patch into a layer; the seam all transforms use.
+   *  Values are snapped to the half-pixel grid (see `quantize`). */
   updateLayerTransform: (
     id: string,
     patch: Partial<Pick<Layer, 'x' | 'y' | 'width' | 'height'>>,
   ) => void
+  /** Apply transform patches to many layers in one update (group drag, alignment).
+   *  Every patch is snapped to the half-pixel grid. */
+  updateLayersTransform: (updates: LayerTransformUpdate[]) => void
   /** Set a layer's opacity, clamped to [0, 1]. */
   updateLayerOpacity: (id: string, opacity: number) => void
-  /** Remove a layer; clears selection if it was the selected one. */
+  /** Remove a layer; drops it from the selection if present. */
   deleteLayer: (id: string) => void
   /** Move a layer within the array and renumber z-indices densely (base stays 0). */
   reorderLayer: (fromIndex: number, toIndex: number) => void
@@ -36,7 +50,7 @@ export interface CompositionStore extends CompositionState {
 const initialState: CompositionState = {
   canvas: null,
   layers: [],
-  selectedLayerId: null,
+  selectedLayerIds: [],
   isDirty: false,
 }
 
@@ -70,7 +84,7 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
     set({
       canvas: { width: layer.naturalWidth, height: layer.naturalHeight },
       layers: [base, ...overlays],
-      selectedLayerId: base.id,
+      selectedLayerIds: [base.id],
       isDirty: true,
     })
   },
@@ -87,23 +101,65 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
       ...layer,
       isBaseImage: false,
       zIndex: maxOverlayZ + 1,
+      // Snap the placement math (computed in UploadDropzone) to the half-pixel
+      // grid so even a freshly added overlay starts on-grid.
+      ...quantizePatch({
+        x: layer.x,
+        y: layer.y,
+        width: layer.width,
+        height: layer.height,
+      }),
     }
     set({
       layers: [...layers, overlay],
-      selectedLayerId: overlay.id,
+      selectedLayerIds: [overlay.id],
       isDirty: true,
     })
   },
 
-  selectLayer: (id) => set({ selectedLayerId: id }),
+  selectLayer: (id, mode = 'replace') =>
+    set((state) => {
+      if (id === null) return { selectedLayerIds: [] }
+      const has = state.selectedLayerIds.includes(id)
+      if (mode === 'toggle') {
+        return {
+          selectedLayerIds: has
+            ? state.selectedLayerIds.filter((x) => x !== id)
+            : [...state.selectedLayerIds, id],
+        }
+      }
+      if (mode === 'add') {
+        return {
+          selectedLayerIds: has ? state.selectedLayerIds : [...state.selectedLayerIds, id],
+        }
+      }
+      // replace: a plain click on a layer ALREADY in the selection keeps the set
+      // intact so a subsequent drag moves the whole group. Only an unselected
+      // target replaces the selection.
+      return {
+        selectedLayerIds: has ? state.selectedLayerIds : [id],
+      }
+    }),
+
+  clearSelection: () => set({ selectedLayerIds: [] }),
 
   updateLayerTransform: (id, patch) =>
-    set((state) => ({
-      layers: state.layers.map((l) =>
-        l.id === id ? { ...l, ...patch } : l,
-      ),
-      isDirty: true,
-    })),
+    get().updateLayersTransform([{ id, patch }]),
+
+  updateLayersTransform: (updates) =>
+    set((state) => {
+      if (updates.length === 0) return state
+      const patches = new Map(
+        updates.map((u) => [u.id, quantizePatch(u.patch)]),
+      )
+      return {
+        layers: state.layers.map((l) => {
+          const patch = patches.get(l.id)
+          return patch ? { ...l, ...patch } : l
+        }),
+        isDirty: true,
+      }
+    }),
 
   updateLayerOpacity: (id, opacity) =>
     set((state) => ({
@@ -120,8 +176,7 @@ export const useCompositionStore = create<CompositionStore>()((set, get) => ({
       revokePreview(target.previewUrl)
       return {
         layers: state.layers.filter((l) => l.id !== id),
-        selectedLayerId:
-          state.selectedLayerId === id ? null : state.selectedLayerId,
+        selectedLayerIds: state.selectedLayerIds.filter((x) => x !== id),
         isDirty: true,
       }
     }),

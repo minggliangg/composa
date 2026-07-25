@@ -68,7 +68,9 @@ export interface CanvasConfig {
 export interface CompositionState {
   canvas: CanvasConfig | null
   layers: Layer[]
-  selectedLayerId: string | null
+  /** Selected layer ids in selection order; the LAST entry is the primary
+   *  (anchor) edited by the properties form / targeted by resize handles. */
+  selectedLayerIds: string[]
   /** Flips true on first mutation; drives the refresh-warning banner. */
   isDirty: boolean
 }

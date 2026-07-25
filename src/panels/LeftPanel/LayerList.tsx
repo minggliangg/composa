@@ -22,7 +22,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 
 export function LayerList() {
   const layers = useCompositionStore((s) => s.layers)
-  const selectedLayerId = useCompositionStore((s) => s.selectedLayerId)
+  const selectedLayerIds = useCompositionStore((s) => s.selectedLayerIds)
   const selectLayer = useCompositionStore((s) => s.selectLayer)
   const deleteLayer = useCompositionStore((s) => s.deleteLayer)
   const reorderLayer = useCompositionStore((s) => s.reorderLayer)
@@ -131,11 +131,11 @@ export function LayerList() {
               key={layer.id}
               layer={layer}
               displayFilename={displayNames[listIndex] ?? layer.originalFilename}
-              selected={selectedLayerId === layer.id}
+              selected={selectedLayerIds.includes(layer.id)}
               listIndex={listIndex}
               listLength={length}
               isDropTarget={dropTargetIndex === listIndex}
-              onSelect={() => selectLayer(layer.id)}
+              onSelect={(mode) => selectLayer(layer.id, mode)}
               onRequestDelete={() => setPendingDeleteId(layer.id)}
               onMoveUp={() => moveByOne(listIndex, listIndex - 1)}
               onMoveDown={() => moveByOne(listIndex, listIndex + 1)}

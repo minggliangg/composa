@@ -1,23 +1,30 @@
 /**
- * Pointer-event DRAG hook (Phase 04). Implements click-to-select + drag-to-move
- * for an overlay layer, routing every transform through the store's
- * `updateLayerTransform` seam.
+ * Pointer-event DRAG hook. Implements click-to-select (with multi-select
+ * modifiers) + drag-to-move, routing every transform through the store's
+ * `updateLayersTransform` seam.
  *
- * Design:
- *   - On pointerdown: select the layer, snapshot its live x/y and the pointer's
- *     canvas position, and `setPointerCapture` so subsequent moves (and the
- *     release) keep targeting this element even if the pointer leaves it.
- *   - On pointermove: convert the pointer to canvas units, compute the delta
- *     from the snapshot, and write the new x/y through `applyDrag`.
- *   - On pointerup/cancel: release capture and clear the gesture.
+ * Selection (resolved on pointerdown BEFORE snapshotting, reading the live store
+ * so the gesture anchors to current state):
+ *   - modifier (shift / meta / ctrl): TOGGLE this layer in the selection.
+ *   - plain click on an unselected layer: REPLACE the selection with it.
+ *   - plain click on a layer already in the selection: KEEP the set, so a
+ *     subsequent drag moves the whole group.
+ *
+ * Drag: snapshots the live x/y of every selected NON-BASE layer on pointerdown,
+ * then on each move applies the same canvas-unit delta to all of them. A single
+ * pointer capture on the clicked element is enough — only that element's
+ * onPointerMove fires, and it writes the entire group. (Multi-select never
+ * includes the base: the base is `pointerEvents:none` on the canvas.)
  *
  * Coordinates are NOT clamped — off-canvas dragging is allowed (plan §4);
- * viewport clipping handles it at export time.
+ * viewport clipping handles it at export time. Values are snapped to the
+ * half-pixel grid at the store seam.
  */
 import { useCallback, useRef } from 'react'
 import type { RefObject, PointerEvent } from 'react'
 import type { Layer } from '../types/layer'
 import { useCompositionStore } from '../state/compositionStore'
+import { selectionModeFromEvent } from '../state/selection'
 import { screenToCanvas } from './coords'
 import type { CanvasPoint } from './coords'
 
@@ -37,11 +44,16 @@ export function applyDrag(
   return { x: startX + deltaCanvasX, y: startY + deltaCanvasY }
 }
 
+interface DragLayer {
+  id: string
+  startX: number
+  startY: number
+}
+
 interface DragState {
   pointerId: number
   startPointer: CanvasPoint
-  startLayerX: number
-  startLayerY: number
+  layers: DragLayer[]
 }
 
 export interface CanvasPointerHandlers {
@@ -60,10 +72,6 @@ export function useCanvasPointer(
   layer: Layer,
   svgRef: RefObject<SVGSVGElement | null>,
 ): CanvasPointerHandlers {
-  const selectLayer = useCompositionStore((s) => s.selectLayer)
-  const updateLayerTransform = useCompositionStore(
-    (s) => s.updateLayerTransform,
-  )
   const drag = useRef<DragState | null>(null)
 
   const onPointerDown = useCallback(
@@ -71,22 +79,35 @@ export function useCanvasPointer(
       if (e.button !== 0) return // primary button only
       const svg = svgRef.current
       if (!svg) return
-      // Read the LIVE layer transform from the store so the gesture anchors to
-      // the actual current position, never a stale render closure.
-      const current = useCompositionStore
-        .getState()
-        .layers.find((l) => l.id === layer.id)
-      if (!current) return
-      selectLayer(layer.id)
+
+      const store = useCompositionStore.getState()
+      const mode = selectionModeFromEvent(e)
+      const isSel = store.selectedLayerIds.includes(layer.id)
+      // Resolve the post-click selection before snapshotting positions. Plain
+      // click on an already-selected layer keeps the set (group drag).
+      if (mode === 'toggle') {
+        store.selectLayer(layer.id, 'toggle')
+      } else if (!isSel) {
+        store.selectLayer(layer.id, 'replace')
+      }
+
+      // Snapshot every selected NON-BASE layer's live position. Read fresh from
+      // the store (selectLayer above already applied, synchronously).
+      const after = useCompositionStore.getState()
+      const selectedIds = after.selectedLayerIds
+      const movers = after.layers
+        .filter((l) => selectedIds.includes(l.id) && !l.isBaseImage)
+        .map((l): DragLayer => ({ id: l.id, startX: l.x, startY: l.y }))
+      if (movers.length === 0) return
+
       drag.current = {
         pointerId: e.pointerId,
         startPointer: screenToCanvas(svg, e.clientX, e.clientY),
-        startLayerX: current.x,
-        startLayerY: current.y,
+        layers: movers,
       }
       e.currentTarget.setPointerCapture(e.pointerId)
     },
-    [layer.id, selectLayer, svgRef],
+    [layer.id, svgRef],
   )
 
   const onPointerMove = useCallback(
@@ -96,15 +117,18 @@ export function useCanvasPointer(
       const svg = svgRef.current
       if (!svg) return
       const p = screenToCanvas(svg, e.clientX, e.clientY)
-      const next = applyDrag(
-        d.startLayerX,
-        d.startLayerY,
-        p.x - d.startPointer.x,
-        p.y - d.startPointer.y,
+      const dx = p.x - d.startPointer.x
+      const dy = p.y - d.startPointer.y
+      // Apply the same delta to every snapshotted layer; the store snaps each
+      // result to the half-pixel grid.
+      useCompositionStore.getState().updateLayersTransform(
+        d.layers.map((s) => ({
+          id: s.id,
+          patch: applyDrag(s.startX, s.startY, dx, dy),
+        })),
       )
-      updateLayerTransform(layer.id, next)
     },
-    [layer.id, svgRef, updateLayerTransform],
+    [svgRef],
   )
 
   const endDrag = useCallback((e: PointerEvent) => {

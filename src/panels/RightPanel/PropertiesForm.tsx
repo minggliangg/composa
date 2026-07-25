@@ -1,8 +1,9 @@
 /**
  * Properties form (Phase 06).
  *
- * Reads `selectedLayerId` from the store; if none is selected (or the selected
- * id no longer resolves to a layer) shows a placeholder. Otherwise renders:
+ * Reads the PRIMARY selected layer (the last id in `selectedLayerIds`); if none
+ * is selected (or the primary id no longer resolves to a layer) shows a
+ * placeholder. Otherwise renders:
  *   - the layer's `originalFilename` read-only,
  *   - natural pixel dimensions read-only (context only),
  *   - numeric inputs for `x`, `y`, `width`, `height` that write through the
@@ -31,9 +32,14 @@ const FIELDS: { key: Field; label: string; clampMin: boolean }[] = [
 ]
 
 export function PropertiesForm() {
-  const selectedLayerId = useCompositionStore((s) => s.selectedLayerId)
+  const selectedLayerIds = useCompositionStore((s) => s.selectedLayerIds)
+  // The primary (anchor) is the last id; the properties form edits that one.
+  const primaryId =
+    selectedLayerIds.length > 0
+      ? selectedLayerIds[selectedLayerIds.length - 1]
+      : null
   const layer = useCompositionStore((s) =>
-    s.layers.find((l) => l.id === selectedLayerId),
+    s.layers.find((l) => l.id === primaryId),
   )
 
   if (!layer) {
@@ -45,14 +51,22 @@ export function PropertiesForm() {
   }
 
   // key by id so local input state resets cleanly when the selection changes.
-  return <LayerPropertiesForm key={layer.id} layer={layer} />
+  return (
+    <LayerPropertiesForm
+      key={layer.id}
+      layer={layer}
+      selectedCount={selectedLayerIds.length}
+    />
+  )
 }
 
 interface LayerPropertiesFormProps {
   layer: Layer
+  /** Total number of selected layers (the form edits only the primary). */
+  selectedCount: number
 }
 
-function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
+function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps) {
   const updateLayerTransform = useCompositionStore(
     (s) => s.updateLayerTransform,
   )
@@ -111,23 +125,12 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
 
   const handleBlur = (field: Field) => {
     focusedField.current = null
-    const spec = FIELDS.find((f) => f.key === field)!
-    const raw = drafts[field]
-    const parsed = parseLayerNumber(raw)
-    if (parsed === null) {
-      // Empty / invalid on blur: revert to the authoritative store value.
-      setDrafts((prev) => ({ ...prev, [field]: String(layer[field]) }))
-      return
-    }
-    if (spec.clampMin) {
-      const clamped = clampTransformValue(parsed, MIN_LAYER_SIZE)
-      setDrafts((prev) => ({ ...prev, [field]: String(clamped) }))
-      if (clamped !== parsed) {
-        updateLayerTransform(layer.id, {
-          [field]: clamped,
-        } as Pick<Layer, Field>)
-      }
-    }
+    // The store value is the single source of truth — it is rounded to the
+    // half-pixel grid (see `quantize`) and clamped for width/height as the
+    // value is typed. Resync the draft on blur so the input shows what was
+    // actually committed: e.g. typing 12.7 (stored as 12.5), or an invalid /
+    // empty draft that never committed (reverts to the prior store value).
+    setDrafts((prev) => ({ ...prev, [field]: String(layer[field]) }))
   }
 
   return (
@@ -144,6 +147,16 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
           {layer.originalFilename}
         </span>
       </div>
+
+      {selectedCount > 1 && (
+        <p
+          className="rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-200"
+          data-testid="properties-multi-select-note"
+        >
+          {selectedCount} layers selected — these inputs edit this layer; use
+          the alignment controls for all.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -168,7 +181,7 @@ function LayerPropertiesForm({ layer }: LayerPropertiesFormProps) {
               <span className="text-xs text-slate-500">{label}</span>
               <input
                 type="number"
-                step={1}
+                step={0.5}
                 value={drafts[key]}
                 onChange={(e) => handleChange(key, e.target.value)}
                 onFocus={() => handleFocus(key)}
