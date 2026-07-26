@@ -37,6 +37,7 @@ import { exportComposition } from '../export/exportComposition'
 import { wasmErrorMessage } from '../upload/errorMessages'
 import { toggleTheme, useTheme } from '../state/theme'
 import { useUiState } from '../state/uiState'
+import { showOnboarding } from '../state/onboarding'
 
 export function TopBar() {
   const layers = useCompositionStore((s) => s.layers)
@@ -269,6 +270,30 @@ export function TopBar() {
               />
             </svg>
           )}
+        </button>
+
+        {/* Onboarding help (?) — re-opens the first-run walkthrough at any
+            time, regardless of whether the user has seen it before. A ghost
+            icon button so it reads as part of the secondary-control cluster
+            (undo/redo, theme) and never competes with Export's primary weight. */}
+        <button
+          type="button"
+          onClick={() => showOnboarding()}
+          aria-label="Show onboarding"
+          title="Show onboarding"
+          className="rounded-md border border-transparent bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+          data-testid="onboarding-help"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M6.3 6.5a1.8 1.8 0 1 1 2.5 1.65c-.55.28-.8.55-.8 1.1"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+            <circle cx="8" cy="11.4" r="0.85" fill="currentColor" />
+          </svg>
         </button>
 
         <span aria-hidden="true" className="h-5 w-px bg-border" />
