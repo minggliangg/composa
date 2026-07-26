@@ -509,3 +509,173 @@ describe('resetLayersAspect (revert to natural aspect ratio)', () => {
     expect(after2.y).toBe(after1.y)
   })
 })
+
+describe('resetLayersToOriginalSize (revert to source pixel dimensions)', () => {
+  /** Build an overlay with full control over natural + rendered dims. */
+  function makeOverlayWithDims(
+    naturalWidth: number,
+    naturalHeight: number,
+    width: number,
+    height: number,
+    x = 0,
+    y = 0,
+  ): Layer {
+    const id = createLayerId()
+    return {
+      id,
+      originalFilename: 'o.png',
+      mimeType: 'image/png',
+      previewUrl: `blob:o-${id}`,
+      fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },
+      x,
+      y,
+      width,
+      height,
+      naturalWidth,
+      naturalHeight,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      visible: true,
+      locked: false,
+      isBaseImage: false,
+    }
+  }
+
+  beforeEach(() => {
+    useCompositionStore.getState().resetComposition()
+  })
+
+  it('restores a resized layer to its natural dims, recentered on both axes', () => {
+    // Natural 100x100, scaled up to 200x200 at (50,50) — center is (150,150).
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(100, 100, 200, 200, 50, 50)
+    store().addOverlay(overlay)
+
+    store().resetLayersToOriginalSize([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    // Size back to natural.
+    expect(result.width).toBe(100)
+    expect(result.height).toBe(100)
+    // Center held on both axes: x = 50 + (200-100)/2 = 100; y likewise.
+    expect(result.x).toBe(100)
+    expect(result.y).toBe(100)
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('is a near-no-op when the layer already renders at its natural dims', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(100, 100, 100, 100, 7, 9)
+    store().addOverlay(overlay)
+
+    store().resetLayersToOriginalSize([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width).toBe(100)
+    expect(result.height).toBe(100)
+    expect(result.x).toBe(7)
+    expect(result.y).toBe(9) // zero delta
+  })
+
+  it('snaps the derived x/y to the half-pixel grid', () => {
+    // Pick a rendered width whose recenter delta is non-integer: width 201,
+    // natural 100 → x delta (201-100)/2 = 50.5 (already on grid). Use width 202
+    // for a non-half delta: (202-100)/2 = 51 → snaps to 51 (integer, on grid).
+    // To force a true non-half delta, use width 201 with natural 100 against an
+    // odd rendered-position base — but the patch only depends on (w-naturalW)/2.
+    // (201-100)/2 = 50.5 — exactly on the half-pixel grid, no snap needed.
+    // Use width 203: (203-100)/2 = 51.5 — also on grid. The recenter math over
+    // integers always lands on .0 or .5, so assert the exact expected values.
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(100, 100, 203, 203, 0, 0)
+    store().addOverlay(overlay)
+
+    store().resetLayersToOriginalSize([overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width).toBe(100)
+    expect(result.height).toBe(100)
+    // (203-100)/2 = 51.5 — lands on the half-pixel grid unchanged.
+    expect(result.x).toBe(51.5)
+    expect(result.y).toBe(51.5)
+  })
+
+  it('reverts each layer independently in a multi-select (distinct sizes)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const a = makeOverlayWithDims(100, 100, 200, 200, 0, 0) // scaled up
+    const b = makeOverlayWithDims(50, 50, 300, 300, 0, 0) // scaled up more
+    store().addOverlay(a)
+    store().addOverlay(b)
+
+    store().resetLayersToOriginalSize([a.id, b.id])
+
+    const layers = useCompositionStore.getState().layers
+    const ra = layers.find((l) => l.id === a.id)!
+    const rb = layers.find((l) => l.id === b.id)!
+    expect(ra.width).toBe(100)
+    expect(ra.height).toBe(100)
+    expect(rb.width).toBe(50)
+    expect(rb.height).toBe(50)
+    // a recenter: 0 + (200-100)/2 = 50; b: 0 + (300-50)/2 = 125.
+    expect(ra.x).toBe(50)
+    expect(rb.x).toBe(125)
+  })
+
+  it('ignores ids that do not resolve to a layer', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(100, 100, 200, 200)
+    store().addOverlay(overlay)
+
+    store().resetLayersToOriginalSize(['nope-not-a-layer', overlay.id])
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width).toBe(100)
+    expect(result.height).toBe(100)
+  })
+
+  it('skips layers with zero natural dimensions (guard)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const zero = makeOverlayWithDims(0, 0, 200, 200)
+    store().addOverlay(zero)
+    useCompositionStore.setState({ isDirty: false })
+
+    expect(() => store().resetLayersToOriginalSize([zero.id])).not.toThrow()
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === zero.id,
+    )!
+    // Untouched.
+    expect(result.width).toBe(200)
+    expect(result.height).toBe(200)
+    expect(useCompositionStore.getState().isDirty).toBe(false)
+  })
+
+  it('is idempotent: calling twice yields the same geometry', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayWithDims(100, 100, 200, 200, 50, 50)
+    store().addOverlay(overlay)
+
+    store().resetLayersToOriginalSize([overlay.id])
+    const after1 = {
+      ...useCompositionStore.getState().layers.find((l) => l.id === overlay.id)!,
+    }
+    store().resetLayersToOriginalSize([overlay.id])
+    const after2 = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+
+    expect(after2.width).toBe(after1.width)
+    expect(after2.height).toBe(after1.height)
+    expect(after2.x).toBe(after1.x)
+    expect(after2.y).toBe(after1.y)
+  })
+})
+

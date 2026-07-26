@@ -161,6 +161,30 @@ describe('history — discrete actions', () => {
       store().layers.find((l) => l.id === id)?.height,
     ).toBe(60) // back to distorted
   })
+
+  it('undo of resetLayersToOriginalSize undoes the size restore', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    // Scale a 100x100 layer up to 200x200.
+    const id = createLayerId()
+    const resized: Layer = {
+      ...makeOverlayLayer('o.png'),
+      id,
+      naturalWidth: 100,
+      naturalHeight: 100,
+      width: 200,
+      height: 200,
+    }
+    store().addOverlay(resized)
+    store().resetLayersToOriginalSize([id])
+    expect(
+      store().layers.find((l) => l.id === id)?.width,
+    ).toBe(100) // restored
+
+    temporal().undo()
+    expect(
+      store().layers.find((l) => l.id === id)?.width,
+    ).toBe(200) // back to resized
+  })
 })
 
 describe('history — selection is NOT tracked', () => {

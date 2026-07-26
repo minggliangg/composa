@@ -25,7 +25,7 @@ import type {
   DistributeAxis,
 } from '../../canvas/align'
 import type { Layer } from '../../types/layer'
-import { isLayerDistorted } from './transformValidation'
+import { isLayerDistorted, isLayerResized } from './transformValidation'
 
 /** Geometry of the alignment-bar drawn inside a 16x16 icon, per target. */
 const BAR_GEOM: Record<AlignTarget, { x: number; y: number; w: number; h: number }> = {
@@ -144,6 +144,35 @@ function ResetAspectIcon() {
   )
 }
 
+/** A large dashed outer rect (current size) with a smaller solid inner rect
+ *  (natural/original size) centered inside it — the "shrink to original size"
+ *  gesture. Parallel sibling to ResetAspectIcon. */
+function ResetSizeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect
+        x="2.25"
+        y="4.25"
+        width="11.5"
+        height="7.5"
+        rx="1"
+        stroke="currentColor"
+        strokeOpacity="0.45"
+        strokeWidth="1"
+        strokeDasharray="2 1.5"
+      />
+      <rect
+        x="5.5"
+        y="6"
+        width="5"
+        height="4"
+        rx="0.75"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
 interface ToolButtonProps {
   label: string
   testId: string
@@ -161,7 +190,7 @@ function ToolButton({ label, testId, disabled, onClick, children }: ToolButtonPr
       disabled={disabled}
       onClick={onClick}
       data-testid={testId}
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-transparent"
+      className="flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -183,7 +212,7 @@ function Group({
   const enabled = count >= min
   return (
     <fieldset className="flex flex-col gap-1" disabled={!enabled}>
-      <legend className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-fg-muted">
+      <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
         {legend}
         {!enabled && (
           <span className="font-normal normal-case text-fg-subtle">
@@ -204,6 +233,9 @@ export function AlignmentToolbar() {
     (s) => s.updateLayersTransform,
   )
   const resetLayersAspect = useCompositionStore((s) => s.resetLayersAspect)
+  const resetLayersToOriginalSize = useCompositionStore(
+    (s) => s.resetLayersToOriginalSize,
+  )
 
   if (!canvas) return null
 
@@ -225,6 +257,9 @@ export function AlignmentToolbar() {
   // Any selected overlay whose rendered ratio drifts from its source can be
   // reverted; the button is inert when every selection already matches.
   const anyDistorted = selectedOverlays.some(isLayerDistorted)
+  // Any selected overlay whose rendered size differs from its source pixel
+  // dims can be reset to original size; inert when all already match.
+  const anyResized = selectedOverlays.some(isLayerResized)
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border bg-raised/50 p-3 text-sm">
@@ -286,6 +321,20 @@ export function AlignmentToolbar() {
           onClick={() => resetLayersAspect(selectedOverlays.map((l) => l.id))}
         >
           <ResetAspectIcon />
+        </ToolButton>
+        {/* Reset to source pixel dimensions (naturalWidth × naturalHeight),
+            recentered on both axes. Inert when every selection is already at
+            its natural size — unusual for overlays (uploads scale to ~45% of
+            the canvas), so this is usually enabled. */}
+        <ToolButton
+          label="Reset to original size"
+          testId="reset-size"
+          disabled={!anyResized}
+          onClick={() =>
+            resetLayersToOriginalSize(selectedOverlays.map((l) => l.id))
+          }
+        >
+          <ResetSizeIcon />
         </ToolButton>
       </Group>
     </div>

@@ -83,10 +83,13 @@ export function LayerListItem({
       data-selected={selected ? 'true' : 'false'}
       className={[
         'flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition-colors',
+        // Selected reads as a calm neutral emphasis here — the canvas selection
+        // OUTLINE carries the green "selected" meaning; the list row just needs
+        // to read as distinct from its unselected neighbors.
         selected
-          ? 'border-accent bg-accent/10'
+          ? 'border-border-strong bg-raised-hover'
           : 'border-transparent bg-raised hover:bg-raised-hover',
-        isDropTarget ? 'ring-2 ring-accent' : '',
+        isDropTarget ? 'ring-2 ring-fg-muted/40' : '',
         isBase ? 'cursor-default' : 'cursor-pointer',
       ].join(' ')}
     >
@@ -98,7 +101,7 @@ export function LayerListItem({
           {displayFilename}
         </span>
         {isBase && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+          <span className="mt-0.5 w-fit rounded-sm border border-border bg-raised px-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
             base
           </span>
         )}
@@ -113,7 +116,7 @@ export function LayerListItem({
           }}
           disabled={!canMoveUp}
           aria-label="Move layer up"
-          className="rounded p-1 text-fg-subtle hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded p-1 text-fg-subtle hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:opacity-30"
           data-testid="layer-move-up"
         >
           {/* Up arrow */}
@@ -141,7 +144,7 @@ export function LayerListItem({
           }}
           disabled={!canMoveDown}
           aria-label="Move layer down"
-          className="rounded p-1 text-fg-subtle hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded p-1 text-fg-subtle hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:opacity-30"
           data-testid="layer-move-down"
         >
           {/* Down arrow */}
@@ -170,7 +173,7 @@ export function LayerListItem({
           disabled={isBase}
           aria-label={`Delete ${displayFilename}`}
           title={isBase ? 'Base can only be removed via Reset' : 'Delete layer'}
-          className="rounded p-1 text-fg-subtle hover:bg-danger/20 hover:text-danger focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded p-1 text-fg-subtle hover:bg-danger/20 hover:text-danger focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:opacity-30"
           data-testid="layer-delete"
         >
           {/* Trash icon */}

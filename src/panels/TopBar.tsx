@@ -36,6 +36,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { exportComposition } from '../export/exportComposition'
 import { wasmErrorMessage } from '../upload/errorMessages'
 import { toggleTheme, useTheme } from '../state/theme'
+import { useUiState } from '../state/uiState'
 
 export function TopBar() {
   const layers = useCompositionStore((s) => s.layers)
@@ -56,6 +57,7 @@ export function TopBar() {
   const hasBase = layers.some((l) => l.isBaseImage)
   const hasLayers = layers.length > 0
   const theme = useTheme()
+  const markSaved = useUiState((s) => s.markSaved)
 
   // Global undo/redo shortcuts. Ignore when focus is in an editable control so
   // typing in the properties form (or any input/textarea/contentEditable) isn't
@@ -118,8 +120,10 @@ export function TopBar() {
         }
       } else {
         // A clean export is the "save" moment for this MVP — settle the
-        // save-status dot back to its quiet state.
+        // save-status dot back to its quiet state, and stamp the parallel UI
+        // store so the status footer can show "saved Xs ago".
         markClean()
+        markSaved()
       }
     } catch {
       setExportError('Could not export the composition.')
@@ -134,9 +138,9 @@ export function TopBar() {
   }
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3.5 text-fg shadow-sm">
+    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-surface/80 px-4 py-3.5 text-fg shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-surface/70">
       <div
-        className="group relative flex w-max items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="group relative flex w-max items-center gap-2 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-fg-muted/40"
         tabIndex={0}
         data-testid="save-status"
         role="img"
@@ -146,16 +150,34 @@ export function TopBar() {
             : 'composa — up to date.'
         }
       >
-        <span className="text-lg font-semibold tracking-tight text-fg">
+        {/* Geometric brand mark — a small moss diamond that anchors the
+            wordmark and gives the tool a logo presence without a heavy wordmark
+            redesign. Tints with the live primary token so it flips with theme. */}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          aria-hidden="true"
+          className="text-fg-subtle"
+        >
+          <path
+            d="M7 1L13 7L7 13L1 7Z"
+            fill="currentColor"
+            opacity="0.9"
+          />
+        </svg>
+        <span className="whitespace-nowrap text-lg font-semibold tracking-tight text-fg">
           composa
-          {/* The trailing period IS the save-status indicator: emerald when
-              clean, warn-amber with a gentle pulse when dirty. */}
+          {/* The trailing period IS the save-status indicator: neutral when
+              clean (green is reserved for meaningful surfaces like Export +
+              selection), warn-amber with a gentle pulse when dirty. */}
           <span
             aria-hidden="true"
             data-testid="save-status-dot"
             className={
               'inline-block transition-colors duration-300 ' +
-              (isDirty ? 'text-warn status-pulse' : 'text-primary')
+              (isDirty ? 'text-warn status-pulse' : 'text-fg')
             }
           >
             .
@@ -163,7 +185,7 @@ export function TopBar() {
         </span>
         <span
           role="tooltip"
-          className="pointer-events-none absolute left-0 top-full z-50 mt-2 block w-max max-w-[15rem] rounded-md border border-border bg-raised px-2.5 py-1.5 text-xs text-fg-muted opacity-0 translate-y-0.5 transition duration-150 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0"
+          className="pointer-events-none absolute left-0 top-full z-50 mt-2 block w-max max-w-[15rem] rounded-md border border-border bg-surface/95 px-2.5 py-1.5 text-xs text-fg-muted opacity-0 translate-y-0.5 backdrop-blur-sm transition duration-150 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0"
         >
           {isDirty
             ? 'Unsaved changes — Export to keep your work'
@@ -173,8 +195,8 @@ export function TopBar() {
 
       <div className="flex items-center gap-2">
         {/* Undo/Redo. Disabled at the history edges; tooltips explain when
-            there's nothing to step to. Match the Reset button's border style so
-            the history cluster reads as a calm secondary control group. */}
+            there's nothing to step to. Icon-only ghost buttons so the history
+            cluster reads as a calm secondary control group. */}
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -182,7 +204,7 @@ export function TopBar() {
             disabled={!canUndo}
             title={canUndo ? 'Undo (⌘Z)' : 'Nothing to undo'}
             aria-label="Undo"
-            className="rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
+            className="rounded-md border border-transparent bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
             data-testid="undo-button"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -196,7 +218,7 @@ export function TopBar() {
             disabled={!canRedo}
             title={canRedo ? 'Redo (⌘⇧Z)' : 'Nothing to redo'}
             aria-label="Redo"
-            className="rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
+            className="rounded-md border border-transparent bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
             data-testid="redo-button"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -205,6 +227,10 @@ export function TopBar() {
             </svg>
           </button>
         </div>
+
+        {/* Thin vertical dividers between control groups — the pro-tool tell
+            that separates history / theme / actions into distinct clusters. */}
+        <span aria-hidden="true" className="h-5 w-px bg-border" />
 
         {/* Dark/light toggle. The active theme is driven from theme.ts (which
             mirrors the .dark class on <html>); the click flips it and persists
@@ -218,7 +244,7 @@ export function TopBar() {
           title={
             theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
           }
-          className="rounded-md border border-border bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+          className="rounded-md border border-transparent bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
           data-testid="theme-toggle"
         >
           {theme === 'dark' ? (
@@ -245,6 +271,8 @@ export function TopBar() {
           )}
         </button>
 
+        <span aria-hidden="true" className="h-5 w-px bg-border" />
+
         <div className="flex flex-col items-end gap-1">
           <button
             type="button"
@@ -252,7 +280,7 @@ export function TopBar() {
             disabled={!hasBase || exporting}
             title={exporting ? 'Exporting…' : 'Export composition as SVG'}
             aria-label="Export SVG"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg shadow-sm shadow-emerald-500/20 transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-subtle disabled:shadow-none"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg shadow-sm transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-subtle disabled:shadow-none"
             data-testid="export-button"
           >
             {exporting ? 'Exporting…' : 'Export'}
@@ -267,16 +295,35 @@ export function TopBar() {
           )}
         </div>
 
+        {/* Reset is now icon-only (rotate-ccw), matching the ghost-button
+            style of undo/redo. The destructive weight lives only in the
+            confirm dialog that opens on click — Reset itself reads as a calm
+            secondary control. Keeps data-testid="reset-button". */}
         <button
           type="button"
           onClick={() => setResetOpen(true)}
           disabled={!hasLayers}
           title="Clear the composition"
           aria-label="Reset composition"
-          className="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
+          className="rounded-md border border-transparent bg-transparent p-2 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-fg-subtle disabled:opacity-40"
           data-testid="reset-button"
         >
-          Reset
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M2.5 8a5.5 5.5 0 1 0 1.7-3.97"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M2 2.5v3h3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </div>
 

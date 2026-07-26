@@ -22,6 +22,7 @@ import { MIN_LAYER_SIZE } from '../../canvas/resize'
 import {
   clampTransformValue,
   isLayerDistorted,
+  isLayerResized,
   parseLayerNumber,
 } from './transformValidation'
 
@@ -76,6 +77,9 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
   )
   const updateLayerOpacity = useCompositionStore((s) => s.updateLayerOpacity)
   const resetLayersAspect = useCompositionStore((s) => s.resetLayersAspect)
+  const resetLayersToOriginalSize = useCompositionStore(
+    (s) => s.resetLayersToOriginalSize,
+  )
 
   // Local string drafts for the four inputs.
   const [drafts, setDrafts] = useState<Record<Field, string>>({
@@ -155,7 +159,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
 
       {selectedCount > 1 && (
         <p
-          className="rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-xs text-fg-muted"
+          className="rounded-md border border-border bg-raised px-2 py-1 text-xs text-fg-muted"
           data-testid="properties-multi-select-note"
         >
           {selectedCount} layers selected — these inputs edit this layer; use
@@ -167,7 +171,10 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
         <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
           Natural size
         </span>
-        <span className="text-fg" data-testid="properties-natural-size">
+        <span
+          className="font-mono tabular-nums text-fg"
+          data-testid="properties-natural-size"
+        >
           {layer.naturalWidth} × {layer.naturalHeight}px
         </span>
       </div>
@@ -191,7 +198,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
                 onChange={(e) => handleChange(key, e.target.value)}
                 onFocus={() => handleFocus(key)}
                 onBlur={() => handleBlur(key)}
-                className="rounded-md border border-border bg-raised px-2 py-1 text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                className="rounded-md border border-border bg-raised px-2 py-1 font-mono tabular-nums text-fg focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-fg-muted/40"
                 data-testid={`properties-input-${key}`}
               />
             </label>
@@ -205,10 +212,24 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
           onClick={() => resetLayersAspect([layer.id])}
           disabled={!isLayerDistorted(layer)}
           title="Restore the layer to its source aspect ratio (hold width, recenter)"
-          className="self-start rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-fg transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-raised"
+          className="self-start rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-fg transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-raised"
           data-testid="properties-reset-aspect"
         >
           Reset aspect
+        </button>
+        {/* Reset to the layer's source pixel dimensions (naturalWidth ×
+            naturalHeight), recentered on both axes. Inert when already at
+            natural size. Heavier-touch than "Reset aspect" (which only fixes
+            the ratio holding the current width), so it sits below it. */}
+        <button
+          type="button"
+          onClick={() => resetLayersToOriginalSize([layer.id])}
+          disabled={!isLayerResized(layer)}
+          title="Reset the layer to its source pixel dimensions (recenter)"
+          className="self-start rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-fg transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:text-fg-subtle disabled:hover:bg-raised"
+          data-testid="properties-reset-size"
+        >
+          Reset to original size
         </button>
       </fieldset>
 
@@ -229,10 +250,10 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
             onChange={(e) =>
               updateLayerOpacity(layer.id, Number(e.target.value) / 100)
             }
-            className="h-1.5 w-full flex-1 cursor-pointer appearance-none rounded-full bg-border accent-[var(--primary)]"
+            className="h-1.5 w-full flex-1 cursor-pointer appearance-none rounded-full bg-border accent-[var(--fg-muted)]"
             data-testid="properties-input-opacity"
           />
-          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-fg-muted">
+          <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-fg-muted">
             {Math.round(layer.opacity * 100)}%
           </span>
         </label>

@@ -2,10 +2,11 @@ import { TopBar } from './panels/TopBar'
 import { LeftPanel } from './panels/LeftPanel/LeftPanel'
 import { CompositionCanvas } from './canvas/CompositionCanvas'
 import { RightPanel } from './panels/RightPanel/RightPanel'
+import { StatusBar } from './components/StatusBar'
 
 /**
- * Static three-panel editor shell. No editor behavior yet (Phase 01):
- * TopBar above a responsive row of LeftPanel | CompositionCanvas | RightPanel.
+ * Three-panel editor shell: TopBar above a responsive row of
+ * LeftPanel | CompositionCanvas | RightPanel, with a live StatusBar footer.
  * Panels stack vertically on narrow screens and remain visually distinct.
  */
 function App() {
@@ -17,6 +18,7 @@ function App() {
         <CompositionCanvas />
         <RightPanel />
       </div>
+      <StatusBar />
     </div>
   )
 }

@@ -18,8 +18,10 @@
  * build time) — which is what lets every utility flip automatically when the
  * .dark class toggles.
  *
- * Palette: emerald/teal accent on layered neutrals. Hex shown for legibility
- * during review; values are the same perceptual family in both themes.
+ * Palette: muted moss/sage green accent on warm-green-tinted neutrals. Deliberately
+ * desaturated vs. the usual emerald-500/teal-400 combo so it reads as
+ * editorial/earthy rather than generic-tech. Neutrals keep a faint green
+ * undertone to harmonize; primary/accent are the moss family.
  */
 :root {
   --bg: #f7f8f7; /* app canvas behind everything */
@@ -31,10 +33,10 @@
   --fg: #0f1714; /* primary text */
   --fg-muted: #5b6661; /* secondary text, hints */
   --fg-subtle: #8a948f; /* captions, "base" tag */
-  --primary: #059669; /* primary actions, selection bg (emerald-600) */
-  --primary-strong: #10b981; /* hover/active (emerald-500) */
+  --primary: #4f6f52; /* primary actions, selection bg (moss) */
+  --primary-strong: #5d7e60; /* hover/active (lighter moss) */
   --primary-fg: #ffffff; /* text on primary */
-  --accent: #0d9488; /* selection ring, focus ring, links (teal-600) */
+  --accent: #3d5a46; /* selection ring, focus ring, ticks (deep moss) */
   --danger: #e11d48; /* destructive hover/focus (rose-600) */
   --danger-fg: #ffffff; /* destructive button text */
   --warn: #d97706; /* save-status dot (amber-600) */
@@ -51,10 +53,10 @@
   --fg: #e6ece8;
   --fg-muted: #9aa8a0;
   --fg-subtle: #6b7872;
-  --primary: #10b981; /* emerald-500 */
-  --primary-strong: #34d399; /* emerald-400 */
+  --primary: #7d9a83; /* sage (mid-tone for the button on dark) */
+  --primary-strong: #93ad99; /* lighter sage for hover */
   --primary-fg: #04130d;
-  --accent: #2dd4bf; /* teal-400 */
+  --accent: #9bb8a0; /* light sage — visible on dark surfaces */
   --danger: #fb7185; /* rose-400 */
   --danger-fg: #fecdd3; /* rose-200 */
   --warn: #fbbf24; /* amber-400 */
@@ -87,9 +89,20 @@
 }
 
 /*
+ * Monospace font family for coordinate readouts and status figures. Registered
+ * as a STATIC @theme token (no `inline`) because the stack itself does not flip
+ * with theme — the system-mono list is the right answer in both modes. This
+ * makes `font-mono` emit `font-family: var(--font-mono)`.
+ */
+@theme {
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/*
  * Refined base layer. The font stack and tighter default radius give the tool a
  * slightly more polished feel without changing any layout; the selection color
- * and custom scrollbars reinforce the emerald identity in both themes.
+ * and custom scrollbars reinforce the moss/sage identity in both themes.
  */
 @layer base {
   html {
@@ -99,7 +112,7 @@
   }
 
   ::selection {
-    background-color: color-mix(in oklch, var(--accent) 30%, transparent);
+    background-color: color-mix(in oklch, var(--fg-muted) 30%, transparent);
   }
 
   /* Emerald-tinted scrollbars. `color-mix` lets one rule serve both themes. */
@@ -157,8 +170,45 @@
   }
 }
 
+/*
+ * Quick opacity fade for status/footer/empty-state entrances — a calmer
+ * alternative to the dialog pop, used on elements that appear without being a
+ * focal modal (the status bar, the branded canvas empty state).
+ */
+@keyframes composa-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.composa-fade-in {
+  animation: composa-fade-in 0.12s ease-out;
+}
+
+/*
+ * Keyboard-shortcut chip — the little ⌘Z / ⌘⇧Z glyph shown next to controls in
+ * the pro-tool aesthetic. Bordered raised pill in the mono face; tokenized so
+ * it tracks the theme like everything else.
+ */
+.composa-kbd {
+  border-radius: 0.25rem;
+  border: 1px solid var(--border);
+  background-color: var(--raised);
+  padding: 0 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--fg-subtle);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-pulse {
+    animation: none;
+  }
+  .composa-fade-in {
     animation: none;
   }
   [animation^='composa-dialog-in'] {

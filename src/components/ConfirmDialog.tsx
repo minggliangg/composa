@@ -128,7 +128,7 @@ export function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-border bg-raised px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-raised-hover focus:outline-none focus:ring-2 focus:ring-accent"
+            className="rounded-md border border-border bg-raised px-3 py-1.5 text-sm font-medium text-fg transition-colors hover:bg-raised-hover focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
             data-testid="confirm-cancel"
           >
             {cancelLabel}
@@ -140,7 +140,7 @@ export function ConfirmDialog({
             className={
               destructive
                 ? 'rounded-md border border-danger bg-danger px-3 py-1.5 text-sm font-medium text-danger-fg transition-colors hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-danger'
-                : 'rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-accent'
+                : 'rounded-md border border-primary bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-fg-muted/40'
             }
             data-testid="confirm-confirm"
           >

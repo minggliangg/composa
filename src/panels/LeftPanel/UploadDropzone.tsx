@@ -103,7 +103,37 @@ function computeOverlayPlacement(
 }
 
 const DROP_AREA_CLASS =
-  'flex cursor-pointer flex-col gap-0.5 rounded-md border border-dashed border-border-strong bg-raised p-3 text-center transition-colors hover:border-accent hover:bg-raised-hover'
+  'flex cursor-pointer flex-col items-center gap-1 rounded-md border border-dashed border-border-strong bg-raised p-3 text-center transition-colors hover:border-fg-muted hover:bg-raised-hover'
+
+/** Shared upload affordance icon — a frame with an upward arrow — used above
+ *  each drop area's labels. currentColor lets the parent tint it. */
+function UploadGlyph() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      className="text-fg-subtle"
+    >
+      <path
+        d="M10 14V4M10 4L6 8M10 4L14 8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.5 13v3a1.5 1.5 0 0 0 1.5 1.5h10A1.5 1.5 0 0 0 16.5 16v-3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
 
 /**
  * Base + overlay upload dropzone. Each labeled area is a `<label>` wrapping a
@@ -298,6 +328,7 @@ export function UploadDropzone() {
             }
           }}
         />
+        <UploadGlyph />
         <span className="text-sm font-medium text-fg">Base image</span>
         <span className="text-xs text-fg-muted">
           click or drop one image — sets canvas size
@@ -325,6 +356,7 @@ export function UploadDropzone() {
             }
           }}
         />
+        <UploadGlyph />
         <span className="text-sm font-medium text-fg">Overlays</span>
         <span className="text-xs text-fg-muted">
           {hasBase

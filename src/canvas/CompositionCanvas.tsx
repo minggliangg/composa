@@ -1,7 +1,9 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useCompositionStore } from '../state/compositionStore'
+import { useUiState } from '../state/uiState'
 import { LayerImage } from './LayerImage'
 import { SelectionOverlay } from './SelectionOverlay'
+import { useCanvasScale } from './useCanvasScale'
 
 /**
  * The live composition canvas. Renders a single `<svg>` driven entirely by the
@@ -35,6 +37,17 @@ export function CompositionCanvas() {
   const layers = useCompositionStore((s) => s.layers)
   const clearSelection = useCompositionStore((s) => s.clearSelection)
   const svgRef = useRef<SVGSVGElement>(null)
+  const setScale = useUiState((s) => s.setScale)
+
+  // Measure the editor <svg>'s fitted scale (screen-px per canvas unit). The
+  // hook returns 1 until first measured and handles a null canvas; we publish
+  // its result into the parallel uiState store so the status footer can show a
+  // live "zoom %" without CompositionCanvas knowing about the footer. Hook
+  // order is stable because this runs before the early return below.
+  const scale = useCanvasScale(svgRef, canvas)
+  useEffect(() => {
+    setScale(scale)
+  }, [scale, setScale])
 
   if (!canvas) {
     return (
@@ -42,9 +55,38 @@ export function CompositionCanvas() {
         aria-label="Composition canvas"
         className="flex min-h-60 min-w-0 flex-1 items-center justify-center overflow-visible rounded-md border border-dashed border-border-strong bg-bg p-4"
       >
-        <div className="text-center text-sm text-fg-muted">
+        <div className="composa-fade-in flex flex-col items-center gap-3 text-center text-sm text-fg-muted">
+          {/* Branded empty-state mark — a large faded frame + landscape glyph
+              that reads as "an image goes here" and gives the empty canvas a
+              deliberate, finished look rather than bare placeholder text. */}
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 48 48"
+            fill="none"
+            aria-hidden="true"
+            className="text-fg-subtle/40"
+          >
+            <rect
+              x="6.75"
+              y="9.75"
+              width="34.5"
+              height="28.5"
+              rx="2.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <circle cx="16.5" cy="18.5" r="2.5" fill="currentColor" />
+            <path
+              d="M10 33l8.5-8.5 5 5L29 24l9 9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
           <p className="font-medium text-fg-subtle">composition canvas (empty)</p>
-          <p className="mt-1">upload a base image to begin</p>
+          <p>upload a base image to begin</p>
         </div>
       </section>
     )

@@ -28,6 +28,22 @@ export function isLayerDistorted(layer: Layer): boolean {
 }
 
 /**
+ * Has a layer's rendered SIZE drifted from its source pixel dimensions? Unlike
+ * ratio, size drifts any time a layer is scaled (drag-resize, typed W/H) — so
+ * this is true for almost every overlay (uploads default to ~45% of the canvas,
+ * not 1:1). The reset-to-original-size button stays inert only when the layer
+ * already renders at exactly its source pixel dims.
+ *
+ * Exact comparison (no epsilon): natural dims are integers from the WASM probe,
+ * and the half-pixel grid means a layer genuinely at natural size has integer
+ * width/height. An epsilon here would leave the button perpetually enabled.
+ */
+export function isLayerResized(layer: Layer): boolean {
+  if (layer.naturalWidth <= 0 || layer.naturalHeight <= 0) return false
+  return layer.width !== layer.naturalWidth || layer.height !== layer.naturalHeight
+}
+
+/**
  * Parse a raw text input into a finite number, returning `null` for empty or
  * non-numeric input. The caller treats `null` as "don't write anything" so a
  * transient empty field (while the user clears it to retype) never pollutes the

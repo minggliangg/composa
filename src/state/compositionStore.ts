@@ -66,6 +66,12 @@ export interface CompositionStore extends CompositionState {
    *  patch is snapped to the half-pixel grid and registers as one undo step
    *  once history lands. Layers with no natural dims are skipped. */
   resetLayersAspect: (ids: string[]) => void
+  /** Revert one or more layers to their source pixel dimensions
+   *  (`naturalWidth` × `naturalHeight`), re-anchoring on BOTH axes so each
+   *  layer's center stays put (parallel to reset-aspect's vertical recenter).
+   *  Routed through the shared transform seam: one undo step, half-pixel snap.
+   *  Layers with no natural dims are skipped. */
+  resetLayersToOriginalSize: (ids: string[]) => void
   /** Remove a layer; drops it from the selection if present. */
   deleteLayer: (id: string) => void
   /** Move a layer within the array and renumber z-indices densely (base stays 0). */
@@ -254,6 +260,28 @@ export const useCompositionStore = create<CompositionStore>()(
           const height = l.width / ratio
           const y = l.y + (l.height - height) / 2
           return { id: l.id, patch: { height, y } }
+        }),
+    ),
+
+  resetLayersToOriginalSize: (ids) =>
+    // Set each layer's rendered width/height back to its source pixel dims,
+    // shifting x/y so the layer's CENTER stays put on both axes (a deliberate
+    // parallel to reset-aspect, which recenters vertically only). Routed through
+    // updateLayersTransform → half-pixel snap + one undo step.
+    get().updateLayersTransform(
+      get()
+        .layers.filter(
+          (l) =>
+            ids.includes(l.id) &&
+            l.naturalWidth > 0 &&
+            l.naturalHeight > 0,
+        )
+        .map((l) => {
+          const newW = l.naturalWidth
+          const newH = l.naturalHeight
+          const x = l.x + (l.width - newW) / 2
+          const y = l.y + (l.height - newH) / 2
+          return { id: l.id, patch: { width: newW, height: newH, x, y } }
         }),
     ),
 
