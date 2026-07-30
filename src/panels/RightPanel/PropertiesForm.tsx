@@ -25,6 +25,7 @@ import {
   isLayerResized,
   parseLayerNumber,
 } from './transformValidation'
+import { TextControls } from './TextControls'
 
 type Field = 'x' | 'y' | 'width' | 'height'
 
@@ -76,6 +77,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
     (s) => s.updateLayerTransform,
   )
   const updateLayerOpacity = useCompositionStore((s) => s.updateLayerOpacity)
+  const renameLayer = useCompositionStore((s) => s.renameLayer)
   const resetLayersAspect = useCompositionStore((s) => s.resetLayersAspect)
   const resetLayersToOriginalSize = useCompositionStore(
     (s) => s.resetLayersToOriginalSize,
@@ -93,6 +95,11 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
   // resize) doesn't clobber the user mid-edit.
   const focusedField = useRef<Field | null>(null)
 
+  // Local draft for the editable Name field (same focus-guard discipline as the
+  // transform inputs). A blank committed name reverts to the derived label.
+  const [nameDraft, setNameDraft] = useState(layer.name ?? '')
+  const nameFocused = useRef(false)
+
   // Sync local drafts from the store when the store value changes and the
   // field is NOT actively focused. This keeps the form in lockstep with canvas
   // interaction while preserving in-progress typing.
@@ -106,6 +113,12 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
         focusedField.current === 'height' ? prev.height : String(layer.height),
     }))
   }, [layer.x, layer.y, layer.width, layer.height])
+
+  // Sync the Name draft from the store when it changes and the field isn't
+  // focused (e.g. after an undo or a rename via the layer list).
+  useEffect(() => {
+    if (!nameFocused.current) setNameDraft(layer.name ?? '')
+  }, [layer.name])
 
   /** Commit a draft value to the store, applying clamping where required. */
   const commit = (field: Field, raw: string) => {
@@ -145,11 +158,31 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border bg-raised/50 p-3 text-sm">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
-          Filename
-        </span>
+        <label className="flex flex-col gap-1" data-testid="properties-field-name">
+          <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
+            Name
+          </span>
+          <input
+            type="text"
+            value={nameDraft}
+            placeholder={layer.originalFilename}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onFocus={() => {
+              nameFocused.current = true
+            }}
+            onBlur={() => {
+              nameFocused.current = false
+              renameLayer(layer.id, nameDraft)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+            }}
+            className="rounded-md border border-border bg-raised px-2 py-1 text-fg focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-fg-muted/40"
+            data-testid="properties-name"
+          />
+        </label>
         <span
-          className="break-all font-medium text-fg"
+          className="break-all font-mono text-xs text-fg-subtle"
           title={layer.originalFilename}
           data-testid="properties-filename"
         >
@@ -232,6 +265,8 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
           Reset to original size
         </button>
       </fieldset>
+
+      {layer.fullResBytesRef.kind === 'text' && <TextControls layer={layer} />}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">

@@ -1,5 +1,18 @@
-import type { CompositionState } from '../types/layer'
+import type { CompositionState, TextContent } from '../types/layer'
 import { xmlEscapeAttr } from './xmlEscape'
+import { assignLayerIds } from './layerIds'
+import { layoutText, textAlignAnchor, TEXT_FONT_FAMILY } from '../text/textMetrics'
+import type { EmbeddedFontFace } from './fontEmbed'
+
+/**
+ * Deterministic OFL-1.1 notice constants for the embedded font. The exported
+ * SVG redistributes the font bytes, so it carries the notice too. The comment
+ * form contains NO `--` sequence (or the document is malformed).
+ */
+export const FONT_COPYRIGHT =
+  'Copyright 2020-2024 The Atkinson Hyperlegible Mono Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next-mono)'
+export const FONT_LICENSE = 'OFL-1.1'
+const FONT_NOTICE = `${FONT_COPYRIGHT}. Licensed under the SIL Open Font License 1.1. https://scripts.sil.org/OFL`
 
 /**
  * Options handed in by the orchestrator so the builder never reads the clock or
@@ -13,6 +26,10 @@ export interface BuildOptions {
   appVersion: string
   /** App name embedded in the metadata block. Defaults to `composa.`. */
   appName?: string
+  /** Embedded font faces. When non-empty, a `<defs><style>` block of
+   *  `@font-face` rules (preceded by the OFL notice) is emitted, and the
+   *  metadata carries `fontLicense` + `fontCopyright`. Empty/omitted = no defs. */
+  fontFaces?: EmbeddedFontFace[]
 }
 
 /**
@@ -23,11 +40,14 @@ export interface BuildOptions {
  *   - `blank`: a solid `<rect>` (a blank-base template).
  *   - `svg`: a nested `<svg>` body (`inner`, already id/class-namespaced) + its
  *     source `viewBox`, preserving vector fidelity.
+ *   - `text`: a nested `<svg>` + `<text>`/`<tspan>` laid out from the SAME pure
+ *     `layoutText` the canvas uses, so editor and export can't drift.
  */
 export type LayerSource =
   | { kind: 'raster'; dataUri: string }
   | { kind: 'svg'; inner: string; viewBox: string }
   | { kind: 'blank'; fill: string }
+  | { kind: 'text'; text: TextContent }
 
 /**
  * Build a single self-contained SVG document string from canonical composition
@@ -68,23 +88,37 @@ export function buildSvgDocument(
   // so only <, >, & are strictly required to be escaped — but reusing
   // xmlEscapeAttr (which also escapes quotes) is harmless because an XML
   // parser un-escapes them back when `.textContent` is read. Keeping a single
-  // escape function avoids drift.
-  const metadata = JSON.stringify({
+  // escape function avoids drift. When a font is embedded, the licence + copyright
+  // travel with the metadata too.
+  const meta: Record<string, unknown> = {
     appName: opts.appName ?? 'composa.',
     appVersion: opts.appVersion,
     exportedAt: opts.timestamp,
     canvasWidth: width,
     canvasHeight: height,
     layerCount: layers.length,
-  })
+  }
+  const fontFaces = opts.fontFaces ?? []
+  if (fontFaces.length > 0) {
+    meta.fontLicense = FONT_LICENSE
+    meta.fontCopyright = FONT_COPYRIGHT
+  }
+  const metadata = JSON.stringify(meta)
 
   // Ascending z-index == back-to-front paint order (base = 0 first).
   const sorted = [...layers].sort((a, b) => a.zIndex - b.zIndex)
 
+  // Per-layer exported `id` (NCName, deduped in z order). `id` is the sanitised
+  // machine handle; `data-name` carries the verbatim custom name losslessly.
+  const idMap = assignLayerIds(layers)
+
   const layerLines = sorted.map((layer) => {
     const source = sources[layer.id] ?? { kind: 'blank', fill: '#ffffff' }
+    const idAttr = ` id="${idMap.get(layer.id)}"`
     const roleAttr = layer.isBaseImage ? ' data-role="base"' : ''
     const filenameAttr = ` data-filename="${xmlEscapeAttr(layer.originalFilename)}"`
+    const nameAttr =
+      layer.name !== null ? ` data-name="${xmlEscapeAttr(layer.name)}"` : ''
 
     if (source.kind === 'raster') {
       // Embedded full-resolution image. Byte-identical to the pre-svg export.
@@ -96,7 +130,9 @@ export function buildSvgDocument(
         ` height="${layer.height}"` +
         ` opacity="${layer.opacity}"` +
         ` preserveAspectRatio="none"` +
+        `${idAttr}` +
         `${filenameAttr}` +
+        `${nameAttr}` +
         `${roleAttr} />`
       )
     }
@@ -110,8 +146,46 @@ export function buildSvgDocument(
         ` height="${layer.height}"` +
         ` fill="${source.fill}"` +
         ` opacity="${layer.opacity}"` +
+        `${idAttr}` +
         `${filenameAttr}` +
+        `${nameAttr}` +
         `${roleAttr} />`
+      )
+    }
+
+    if (source.kind === 'text') {
+      // A text layer: a nested <svg> + <text>/<tspan> mirroring the canvas
+      // render MINUS the editor-only hit-rect. Lines come from the SAME pure
+      // layoutText the canvas uses, so geometry can't drift. Explicit x/y per
+      // tspan (never dy) keeps line positions stable under a font fallback.
+      const lines = layoutText(source.text)
+      const anchor = textAlignAnchor(source.text.align)
+      const italicAttr = source.text.italic ? ' font-style="italic"' : ''
+      const tspans = lines
+        .map(
+          (l) =>
+            `<tspan x="${l.x}" y="${l.y}">${xmlEscapeAttr(l.text)}</tspan>`,
+        )
+        .join('')
+      return (
+        `  <svg x="${layer.x}"` +
+        ` y="${layer.y}"` +
+        ` width="${layer.width}"` +
+        ` height="${layer.height}"` +
+        ` viewBox="0 0 ${layer.naturalWidth} ${layer.naturalHeight}"` +
+        ` preserveAspectRatio="none"` +
+        ` opacity="${layer.opacity}"` +
+        `${idAttr}` +
+        `${filenameAttr}` +
+        `${nameAttr}` +
+        `${roleAttr}>` +
+        `<text font-family="'${TEXT_FONT_FAMILY}', ui-monospace, monospace"` +
+        ` font-size="${source.text.fontSize}"` +
+        ` font-weight="${source.text.fontWeight}"` +
+        `${italicAttr}` +
+        ` fill="${source.text.fill}"` +
+        ` text-anchor="${anchor}">${tspans}</text>` +
+        `</svg>`
       )
     }
 
@@ -124,17 +198,43 @@ export function buildSvgDocument(
       ` viewBox="${source.viewBox}"` +
       ` preserveAspectRatio="none"` +
       ` opacity="${layer.opacity}"` +
+      `${idAttr}` +
       `${filenameAttr}` +
+      `${nameAttr}` +
       `${roleAttr}>` +
       source.inner +
       `</svg>`
     )
   })
 
+  // Embedded font: a <defs><style> block of @font-face rules, preceded by the
+  // OFL notice comment, emitted ONLY when font faces are present. The comment
+  // carries no `--` sequence (see FONT_NOTICE). `format('woff2')` — not the
+  // legacy `'woff2-variations'` token, which some non-browser parsers
+  // string-match and then drop the whole `src`. The variable `font-weight: 200
+  // 800` axis is kept so any picked weight resolves.
+  const fontDefs =
+    fontFaces.length > 0
+      ? `  <!-- ${FONT_NOTICE} -->\n` +
+        `  <defs><style><![CDATA[\n` +
+        fontFaces
+          .map((f) =>
+            '@font-face {\n' +
+            `  font-family: '${TEXT_FONT_FAMILY}';\n` +
+            `  font-style: ${f.style};\n` +
+            '  font-weight: 200 800;\n' +
+            `  src: url(${f.dataUri}) format('woff2');\n` +
+            '}',
+          )
+          .join('\n') +
+        `\n]]></style></defs>\n`
+      : ''
+
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"` +
     ` width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n` +
     `  <metadata>${xmlEscapeAttr(metadata)}</metadata>\n` +
+    fontDefs +
     layerLines.join('\n') +
     (layerLines.length > 0 ? '\n' : '') +
     `</svg>`

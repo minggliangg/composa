@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useCompositionStore } from '../../src/state/compositionStore'
 import type { Layer } from '../../src/types/layer'
 import { createLayerId } from '../../src/types/layer'
+import { measureText } from '../../src/text/textMetrics'
+import { MIN_LAYER_SIZE } from '../../src/canvas/resize'
+import { QUANTIZE_STEP } from '../../src/canvas/quantize'
 
 /**
  * Store unit tests. The zustand store is a singleton, so we reset it between
@@ -18,6 +21,7 @@ function makeBaseLayer(
   return {
     id,
     originalFilename: 'base.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:base-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], 'base.png') },
@@ -45,6 +49,7 @@ function makeOverlayLayer(
   return {
     id,
     originalFilename: name,
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:overlay-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], name) },
@@ -346,6 +351,250 @@ describe('compositionStore', () => {
   })
 })
 
+describe('renameLayer', () => {
+  beforeEach(() => {
+    useCompositionStore.getState().resetComposition()
+  })
+
+  it('trims and stores a custom name', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png', 0, 0)
+    store().addOverlay(overlay)
+
+    store().renameLayer(overlay.id, '  Hero  ')
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.name).toBe('Hero')
+    // The original filename is preserved verbatim.
+    expect(result.originalFilename).toBe('o1.png')
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('maps an empty / whitespace-only name to null (revert to derived label)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png', 0, 0)
+    store().addOverlay(overlay)
+    store().renameLayer(overlay.id, 'Hero')
+    expect(
+      useCompositionStore.getState().layers.find((l) => l.id === overlay.id)
+        ?.name,
+    ).toBe('Hero')
+
+    store().renameLayer(overlay.id, '   ')
+
+    expect(
+      useCompositionStore.getState().layers.find((l) => l.id === overlay.id)
+        ?.name,
+    ).toBeNull()
+  })
+
+  it('no-ops on an unknown id', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const before = useCompositionStore.getState()
+    const beforeLayers = before.layers
+    store().renameLayer('nope-not-a-layer', 'whatever')
+    const after = useCompositionStore.getState()
+    // Unknown id: no state change at all (same layers ref, dirty untouched).
+    expect(after.layers).toBe(beforeLayers)
+  })
+
+  it('is a no-op when the name is unchanged', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png', 0, 0)
+    store().addOverlay(overlay)
+    store().renameLayer(overlay.id, 'Hero')
+    useCompositionStore.setState({ isDirty: false })
+
+    store().renameLayer(overlay.id, 'Hero') // identical
+    expect(useCompositionStore.getState().isDirty).toBe(false)
+  })
+
+  it('is undoable (lives in the tracked layers slice)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png', 0, 0)
+    store().addOverlay(overlay)
+    store().renameLayer(overlay.id, 'Hero')
+
+    useCompositionStore.temporal.getState().undo()
+
+    expect(
+      useCompositionStore.getState().layers.find((l) => l.id === overlay.id)
+        ?.name,
+    ).toBeNull()
+  })
+})
+
+describe('updateLayerText', () => {
+  /** A text layer at its measured natural size (scale 1). */
+  function makeTextLayer(content = 'Text', fontSize = 10): Layer {
+    const measured = measureText(content, fontSize)
+    return {
+      id: createLayerId(),
+      originalFilename: 'Text',
+      name: null,
+      mimeType: 'text/plain',
+      previewUrl: '',
+      fullResBytesRef: {
+        kind: 'text',
+        text: {
+          content,
+          fontSize,
+          fontWeight: 400,
+          italic: false,
+          fill: '#000000',
+          align: 'left',
+        },
+      },
+      x: 0,
+      y: 0,
+      width: measured.width,
+      height: measured.height,
+      naturalWidth: measured.width,
+      naturalHeight: measured.height,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      visible: true,
+      locked: false,
+      isBaseImage: false,
+    }
+  }
+
+  beforeEach(() => {
+    useCompositionStore.getState().resetComposition()
+  })
+
+  it('produces exactly ONE history entry per call', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi')
+    store().addOverlay(overlay)
+    const before = useCompositionStore.temporal.getState().pastStates.length
+
+    store().updateLayerText(overlay.id, { content: 'Hello' }, 1)
+
+    expect(
+      useCompositionStore.temporal.getState().pastStates.length,
+    ).toBe(before + 1)
+  })
+
+  it('recomputes natural dims from the merged content', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi', 10)
+    store().addOverlay(overlay)
+
+    store().updateLayerText(overlay.id, { content: 'Hello world' }, 1)
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    const expected = measureText('Hello world', 10)
+    expect(result.naturalWidth).toBe(expected.width)
+    expect(result.naturalHeight).toBe(expected.height)
+  })
+
+  it('preserves the caller-supplied scale (anchored top-left)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi', 10)
+    store().addOverlay(overlay)
+    // Scale the layer up to 2x (width/height only; natural dims unchanged).
+    store().updateLayerTransform(overlay.id, {
+      width: overlay.naturalWidth * 2,
+      height: overlay.naturalHeight * 2,
+    })
+
+    store().updateLayerText(overlay.id, { content: 'Hello' }, 2)
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    const expectedNatural = measureText('Hello', 10)
+    // rendered = natural × scale(2), anchored top-left (x/y untouched).
+    expect(result.width).toBeCloseTo(expectedNatural.width * 2, 10)
+    expect(result.height).toBeCloseTo(expectedNatural.height * 2, 10)
+    expect(result.naturalWidth).toBe(expectedNatural.width)
+    expect(result.x).toBe(overlay.x)
+    expect(result.y).toBe(overlay.y)
+  })
+
+  it('clamps the rendered size to MIN_LAYER_SIZE', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    // A one-char layer at fontSize 1 has a sub-floor natural width.
+    const overlay = makeTextLayer('a', 1)
+    store().addOverlay(overlay)
+
+    store().updateLayerText(overlay.id, { content: 'a' }, 1)
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width).toBeGreaterThanOrEqual(MIN_LAYER_SIZE)
+    expect(result.height).toBeGreaterThanOrEqual(MIN_LAYER_SIZE)
+  })
+
+  it('quantizes width/height to the half-pixel grid', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi', 10)
+    store().addOverlay(overlay)
+
+    store().updateLayerText(overlay.id, { content: 'Hello world' }, 1.3)
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.width / QUANTIZE_STEP).toBe(
+      Math.round(result.width / QUANTIZE_STEP),
+    )
+    expect(result.height / QUANTIZE_STEP).toBe(
+      Math.round(result.height / QUANTIZE_STEP),
+    )
+  })
+
+  it('empty content does not divide by zero (one-cell box)', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi', 10)
+    store().addOverlay(overlay)
+
+    expect(() =>
+      store().updateLayerText(overlay.id, { content: '' }, 1),
+    ).not.toThrow()
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.naturalWidth).toBeGreaterThan(0)
+    expect(result.naturalHeight).toBeGreaterThan(0)
+  })
+
+  it('normalizes content (control chars stripped) on write', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeTextLayer('Hi', 10)
+    store().addOverlay(overlay)
+
+    store().updateLayerText(overlay.id, { content: 'a\x00b' }, 1)
+
+    const result = useCompositionStore.getState().layers.find(
+      (l) => l.id === overlay.id,
+    )!
+    expect(result.fullResBytesRef.kind).toBe('text')
+    if (result.fullResBytesRef.kind === 'text') {
+      expect(result.fullResBytesRef.text.content).toBe('ab')
+    }
+  })
+
+  it('no-ops on an unknown id or a non-text layer', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const raster = makeOverlayLayer('o.png', 0, 0)
+    store().addOverlay(raster)
+    const before = useCompositionStore.getState()
+
+    store().updateLayerText('nope-not-a-layer', { content: 'x' }, 1)
+    store().updateLayerText(raster.id, { content: 'x' }, 1) // raster, not text
+
+    expect(useCompositionStore.getState().layers).toBe(before.layers)
+  })
+})
+
 describe('resetLayersAspect (revert to natural aspect ratio)', () => {
   /** Build an overlay with full control over natural + rendered dims. */
   function makeOverlayWithDims(
@@ -360,6 +609,7 @@ describe('resetLayersAspect (revert to natural aspect ratio)', () => {
     return {
       id,
       originalFilename: 'o.png',
+      name: null,
       mimeType: 'image/png',
       previewUrl: `blob:o-${id}`,
       fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },
@@ -524,6 +774,7 @@ describe('resetLayersToOriginalSize (revert to source pixel dimensions)', () => 
     return {
       id,
       originalFilename: 'o.png',
+      name: null,
       mimeType: 'image/png',
       previewUrl: `blob:o-${id}`,
       fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },

@@ -5,6 +5,7 @@ import { useUiState } from '../state/uiState'
 import type { ViewPoint } from './viewport'
 import { LayerImage } from './LayerImage'
 import { SelectionOverlay } from './SelectionOverlay'
+import { SnapGuides } from './SnapGuides'
 import { useCanvasScale } from './useCanvasScale'
 
 /**
@@ -306,6 +307,10 @@ export function CompositionCanvas() {
           data-editor-only="boundary"
           data-testid="canvas-boundary"
         />
+        {/* Snap alignment guides for an in-progress drag. EDITOR-ONLY: drawn
+            above layer content but below the selection overlay, and never
+            exported (the builder emits from state, not the DOM). */}
+        <SnapGuides />
         <SelectionOverlay svgRef={svgRef} />
       </svg>
     </section>

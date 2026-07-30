@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { dedupeDisplayNames } from '../../src/upload/filenameDisplay'
+import {
+  dedupeDisplayNames,
+  dedupeDisplayLabels,
+  layerDisplayLabel,
+} from '../../src/upload/filenameDisplay'
 
 /**
  * Phase 09 duplicate-filename display tests.
@@ -98,5 +102,80 @@ describe('dedupeDisplayNames', () => {
       'foo.png',
       'Foo (1).png',
     ])
+  })
+})
+
+describe('layerDisplayLabel', () => {
+  it('prefers a custom name over the original filename', () => {
+    expect(
+      layerDisplayLabel({ name: 'hero', originalFilename: 'IMG_0001.png' }),
+    ).toBe('hero')
+  })
+
+  it('falls back to the original filename when name is null', () => {
+    expect(layerDisplayLabel({ name: null, originalFilename: 'logo.svg' })).toBe(
+      'logo.svg',
+    )
+  })
+})
+
+describe('dedupeDisplayLabels', () => {
+  it('returns unique labels unchanged regardless of kind', () => {
+    expect(
+      dedupeDisplayLabels([
+        { label: 'a.png', isFilename: true },
+        { label: 'hero', isFilename: false },
+      ]),
+    ).toEqual(['a.png', 'hero'])
+  })
+
+  it('suffxes FILENAME collisions before the extension (dot-aware)', () => {
+    expect(
+      dedupeDisplayLabels([
+        { label: 'hero.png', isFilename: true },
+        { label: 'hero.png', isFilename: true },
+      ]),
+    ).toEqual(['hero.png', 'hero (1).png'])
+  })
+
+  it('APPENDS the suffix whole for non-filename (custom name) collisions', () => {
+    // A dotted custom name must not be split: 'v1.2 hero' -> 'v1.2 hero (1)'.
+    expect(
+      dedupeDisplayLabels([
+        { label: 'v1.2 hero', isFilename: false },
+        { label: 'v1.2 hero', isFilename: false },
+      ]),
+    ).toEqual(['v1.2 hero', 'v1.2 hero (1)'])
+  })
+
+  it('treats a custom name and a filename with the same text as distinct (no cross-collision)', () => {
+    // 'hero' (custom) and 'hero' (filename) DO collide — same label string — but
+    // each keeps its own suffix style on the SECOND occurrence.
+    expect(
+      dedupeDisplayLabels([
+        { label: 'hero', isFilename: false },
+        { label: 'hero', isFilename: true },
+      ]),
+    ).toEqual(['hero', 'hero (1)'])
+  })
+
+  it('mixes filename and custom collisions in one list deterministically', () => {
+    expect(
+      dedupeDisplayLabels([
+        { label: 'logo.png', isFilename: true },
+        { label: 'Caption', isFilename: false },
+        { label: 'logo.png', isFilename: true },
+        { label: 'Caption', isFilename: false },
+      ]),
+    ).toEqual(['logo.png', 'Caption', 'logo (1).png', 'Caption (1)'])
+  })
+
+  it('is deterministic: the same input yields the same labels', () => {
+    const input = [
+      { label: 'x.png', isFilename: true },
+      { label: 'x.png', isFilename: true },
+      { label: 'note', isFilename: false },
+    ]
+    expect(dedupeDisplayLabels(input)).toEqual(dedupeDisplayLabels(input))
   })
 })

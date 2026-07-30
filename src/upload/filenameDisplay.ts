@@ -1,3 +1,5 @@
+import type { Layer } from '../types/layer'
+
 /**
  * Compute display labels for a list of filenames, appending deterministic
  * `(n)` suffixes for collisions.
@@ -52,6 +54,66 @@ export function dedupeDisplayNames(filenames: string[]): string[] {
     const prior = seenCount.get(name) ?? 0
     seenCount.set(name, prior + 1)
     labels.push(prior === 0 ? name : insertSuffix(name, prior))
+  }
+  return labels
+}
+
+/**
+ * The pre-dedup label a layer shows in the layer list (also the source string
+ * for the exported id). Resolution order: custom `name` → text layer first
+ * content line → `originalFilename`. This is DISPLAY ONLY; the stored values are
+ * never mutated. `fullResBytesRef` is optional so non-layer inputs (tests) that
+ * only carry `name`/`originalFilename` still work.
+ */
+export function layerDisplayLabel(
+  layer: Pick<Layer, 'name' | 'originalFilename'> & {
+    fullResBytesRef?: Layer['fullResBytesRef']
+  },
+): string {
+  if (layer.name !== null) return layer.name
+  // A text layer with no custom name shows its first content line.
+  const ref = layer.fullResBytesRef
+  if (ref?.kind === 'text') {
+    const first = ref.text.content.split('\n')[0] ?? ''
+    return first.trim() === '' ? 'Text' : first
+  }
+  return layer.originalFilename
+}
+
+/** One layer's pre-dedup label plus whether that label is a filename. */
+export interface DisplayLabelEntry {
+  label: string
+  /** True when `label` came from `originalFilename` (dot-aware suffix on
+   *  collision); false for custom names / text labels (append ` (n)` whole). */
+  isFilename: boolean
+}
+
+/**
+ * Disambiguate a list of display labels for collisions. Like
+ * `dedupeDisplayNames`, the FIRST occurrence of a label keeps it verbatim and
+ * later collisions get a ` (n)` token — but the token's placement depends on
+ * the label's origin:
+ *   - a FILENAME keeps the dot-aware `insertSuffix` (so `hero.png` → `hero (1).png`),
+ *   - a non-filename (custom name / text label) appends ` (n)` to the whole
+ *     string (so `v1.2 hero` → `v1.2 hero (1)`, never `v1.2 hero (1).2`-style
+ *     mid-dot splits).
+ *
+ * Determinism: the suffix at a position depends only on prior EXACT-label
+ * matches, so the same layer set always yields the same labels across renders.
+ */
+export function dedupeDisplayLabels(entries: DisplayLabelEntry[]): string[] {
+  const seenCount = new Map<string, number>()
+  const labels: string[] = []
+  for (const { label, isFilename } of entries) {
+    const prior = seenCount.get(label) ?? 0
+    seenCount.set(label, prior + 1)
+    if (prior === 0) {
+      labels.push(label)
+    } else if (isFilename) {
+      labels.push(insertSuffix(label, prior))
+    } else {
+      labels.push(`${label} (${prior})`)
+    }
   }
   return labels
 }

@@ -67,13 +67,13 @@ const STEPS: Step[] = [
   {
     kicker: 'Compose',
     title: 'Base first, then layer up',
-    body: 'Upload a base image from the left panel — it sets the canvas size. Then add overlays, drag them around, and pull the corner/edge handles to resize.',
+    body: 'Upload a base image from the left panel — it sets the canvas size. Then add overlays or a text layer, drag them around, and pull the corner/edge handles to resize.',
     glyph: <FrameCornersIcon size={40} weight="duotone" aria-hidden />,
   },
   {
     kicker: 'Arrange',
     title: 'Refine with pro-tool controls',
-    body: 'Undo/redo with ⌘Z, align and distribute selections from the right panel, tune layer opacity, and flip the dark/light theme from the top bar.',
+    body: 'Undo/redo with ⌘Z, align and distribute selections from the right panel, tune layer opacity, hold Alt while dragging to snap to alignment guides, and flip the dark/light theme from the top bar.',
     glyph: <SlidersIcon size={40} weight="duotone" aria-hidden />,
   },
   {

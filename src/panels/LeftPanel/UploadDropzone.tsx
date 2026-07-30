@@ -12,6 +12,7 @@ import { wasmErrorMessage } from '../../upload/errorMessages'
 import { parseSvgSource } from '../../upload/svgSource'
 import { probeDimensions, decodeAndDownscale } from '../../wasm/imageProcessor'
 import { BLANK_BASE_SIZES, createBlankBaseLayer } from '../../composition/blankBase'
+import { createTextLayer } from '../../composition/textLayer'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 
 const ACCEPT_ATTR =
@@ -250,6 +251,7 @@ export function UploadDropzone() {
       const baseLayer: Layer = {
         id: createLayerId(),
         originalFilename: file.name,
+        name: null,
         mimeType: file.type,
         previewUrl: decoded.previewUrl,
         fullResBytesRef: decoded.fullResBytesRef,
@@ -317,6 +319,7 @@ export function UploadDropzone() {
           const overlayLayer: Layer = {
             id: createLayerId(),
             originalFilename: file.name,
+            name: null,
             mimeType: file.type,
             previewUrl: decoded.previewUrl,
             fullResBytesRef: decoded.fullResBytesRef,
@@ -414,6 +417,29 @@ export function UploadDropzone() {
           ))}
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (!canvas) return
+          addOverlay(createTextLayer(canvas, overlayCount))
+        }}
+        disabled={!hasBase || isProcessing}
+        className="flex items-center justify-center gap-1.5 rounded-md border border-border bg-raised px-2 py-1.5 text-sm font-medium text-fg transition-colors hover:border-fg-muted hover:bg-raised-hover focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+        data-testid="add-text"
+      >
+        {/* "T" glyph — a typeset T reads as text. */}
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M2.5 3.5H11.5M7 3.5V11"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        Add text
+      </button>
 
       <label
         onDragOver={onDragOver}

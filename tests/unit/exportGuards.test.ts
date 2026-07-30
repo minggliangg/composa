@@ -41,6 +41,7 @@ describe('exportComposition — no-base guard', () => {
         {
           id: 'lonely-overlay',
           originalFilename: 'o.png',
+          name: null,
           mimeType: 'image/png',
           previewUrl: 'blob:o',
           fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },

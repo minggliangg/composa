@@ -15,7 +15,7 @@
 import { useState } from 'react'
 import type { DragEvent } from 'react'
 import { useCompositionStore } from '../../state/compositionStore'
-import { dedupeDisplayNames } from '../../upload/filenameDisplay'
+import { layerDisplayLabel, dedupeDisplayLabels } from '../../upload/filenameDisplay'
 import { listIndexToStoreIndex } from './listOrder'
 import { LayerListItem } from './LayerListItem'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -24,6 +24,7 @@ export function LayerList() {
   const layers = useCompositionStore((s) => s.layers)
   const selectedLayerIds = useCompositionStore((s) => s.selectedLayerIds)
   const selectLayer = useCompositionStore((s) => s.selectLayer)
+  const renameLayer = useCompositionStore((s) => s.renameLayer)
   const deleteLayer = useCompositionStore((s) => s.deleteLayer)
   const reorderLayer = useCompositionStore((s) => s.reorderLayer)
 
@@ -39,18 +40,29 @@ export function LayerList() {
   // 0), maintained by the store's reorderLayer.
   const displayLayers = [...layers].reverse()
 
-  // Compute display labels over the DISPLAYED set: collisions get deterministic
-  // `(n)` suffixes before the extension, while the original filename in state
-  // (and thus in export metadata) stays verbatim. Recomputed every render from
-  // the current layer set, so it always tracks additions/deletions/reorders.
-  const displayNames = dedupeDisplayNames(
-    displayLayers.map((l) => l.originalFilename),
+  // Compute display labels over the DISPLAYED set: a custom name wins, else the
+  // original filename; collisions get deterministic ` (n)` tokens (dot-aware
+  // for filenames, whole-string for custom names). The stored `name` /
+  // `originalFilename` (and thus export metadata) stay verbatim. Recomputed
+  // every render so it tracks additions/deletions/reorders/renames.
+  const displayNames = dedupeDisplayLabels(
+    displayLayers.map((l) => ({
+      label: layerDisplayLabel(l),
+      isFilename: l.name === null,
+    })),
   )
 
   const length = displayLayers.length
   const pendingDeleteLayer = pendingDeleteId
     ? layers.find((l) => l.id === pendingDeleteId)
     : null
+  // The (deduped) display label of the layer pending deletion, for the confirm
+  // copy. Found by id through the parallel displayLayers/displayNames arrays.
+  const pendingDeleteLabel = (() => {
+    if (!pendingDeleteLayer) return null
+    const idx = displayLayers.findIndex((l) => l.id === pendingDeleteLayer.id)
+    return idx >= 0 ? (displayNames[idx] ?? null) : null
+  })()
 
   // Move a displayed row by one slot. Converts displayed indices to store
   // indices before calling reorderLayer.
@@ -136,6 +148,7 @@ export function LayerList() {
               listLength={length}
               isDropTarget={dropTargetIndex === listIndex}
               onSelect={(mode) => selectLayer(layer.id, mode)}
+              onRename={(name) => renameLayer(layer.id, name)}
               onRequestDelete={() => setPendingDeleteId(layer.id)}
               onMoveUp={() => moveByOne(listIndex, listIndex - 1)}
               onMoveDown={() => moveByOne(listIndex, listIndex + 1)}
@@ -153,7 +166,7 @@ export function LayerList() {
         title="Delete layer?"
         message={
           pendingDeleteLayer
-            ? `"${pendingDeleteLayer.originalFilename}" will be removed from the composition. This cannot be undone.`
+            ? `"${pendingDeleteLabel ?? pendingDeleteLayer.originalFilename}" will be removed from the composition. This cannot be undone.`
             : 'This layer will be removed from the composition.'
         }
         confirmLabel="Delete"

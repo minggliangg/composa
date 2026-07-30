@@ -10,7 +10,8 @@
  * delete/move controls are disabled — the base is pinned at z-index 0 and can
  * only be removed via the TopBar's reset/clear.
  */
-import type { DragEvent } from 'react'
+import { useRef, useState } from 'react'
+import type { DragEvent, MouseEvent } from 'react'
 import type { Layer } from '../../types/layer'
 import type { SelectionMode } from '../../state/selection'
 import { selectionModeFromEvent } from '../../state/selection'
@@ -29,6 +30,8 @@ export interface LayerListItemProps {
   isDropTarget: boolean
   /** Click selects the layer; the mode (replace/toggle) comes from modifiers. */
   onSelect: (mode: SelectionMode) => void
+  /** Commit an edited name (the store trims and maps '' → null). */
+  onRename: (name: string) => void
   /** Request deletion (opens the shared confirm). Disabled for the base. */
   onRequestDelete: () => void
   /** Move one slot up in the displayed list (toward front / higher z-index). */
@@ -53,6 +56,7 @@ export function LayerListItem({
   listLength,
   isDropTarget,
   onSelect,
+  onRename,
   onRequestDelete,
   onMoveUp,
   onMoveDown,
@@ -68,6 +72,33 @@ export function LayerListItem({
   // The slot just above the base is listLength - 2; an overlay there can't move
   // further down without crossing the base.
   const canMoveDown = !isBase && listIndex < listLength - 2
+
+  // Inline rename: double-click the label swaps it for an <input>. The input is
+  // rendered ONLY while editing (the <li> has no tabIndex, so a persistent
+  // input would add a tab stop to every row). Escape cancels; Enter / blur
+  // commit. The parent <li> is draggable + click-selects, and Escape must not
+  // reach global handlers, so every input event stops propagation; the input is
+  // non-draggable so a click-drag to select text never starts a row drag.
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Set when Escape dismisses the editor so the subsequent blur (fired as the
+  // input loses focus) is treated as a CANCEL, not a commit.
+  const skipBlurCommit = useRef(false)
+
+  const startEdit = (e: MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setDraft(layer.name ?? layer.originalFilename)
+    setEditing(true)
+  }
+  const commitName = () => {
+    onRename(draft)
+    setEditing(false)
+  }
+  const cancelEdit = () => {
+    setEditing(false)
+  }
 
   return (
     <li
@@ -94,12 +125,53 @@ export function LayerListItem({
       ].join(' ')}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        <span
-          className="truncate font-medium text-fg"
-          title={displayFilename}
-        >
-          {displayFilename}
-        </span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            // Focus + select on mount so the user can type/replace immediately.
+            autoFocus
+            value={draft}
+            // Non-draggable + swallow pointer/click so editing never starts a row
+            // drag or a selection change.
+            draggable={false}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            // Stop keydown so Escape never reaches global handlers and Enter /
+            // Space never trigger the <li>'s selection/drag.
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                inputRef.current?.blur()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                skipBlurCommit.current = true
+                inputRef.current?.blur()
+              }
+            }}
+            // The single commit seam: Enter → blur → commit; a plain blur (click
+            // away) also commits. Escape pre-sets the skip flag → blur cancels.
+            onBlur={() => {
+              if (skipBlurCommit.current) {
+                skipBlurCommit.current = false
+                cancelEdit()
+              } else {
+                commitName()
+              }
+            }}
+            className="min-w-0 rounded border border-border-strong bg-surface px-1 py-0.5 text-sm font-medium text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+            data-testid="layer-rename-input"
+          />
+        ) : (
+          <span
+            className="truncate font-medium text-fg"
+            title={displayFilename}
+            onDoubleClick={startEdit}
+          >
+            {displayFilename}
+          </span>
+        )}
         {isBase && (
           <span className="mt-0.5 w-fit rounded-sm border border-border bg-raised px-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
             base

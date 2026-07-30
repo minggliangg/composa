@@ -15,6 +15,7 @@ function makeBaseLayer(naturalWidth: number, naturalHeight: number, id = createL
   return {
     id,
     originalFilename: 'base.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:base-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], 'base.png') },
@@ -37,6 +38,7 @@ function makeOverlayLayer(id = createLayerId()): Layer {
   return {
     id,
     originalFilename: 'overlay.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:overlay-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], 'overlay.png') },

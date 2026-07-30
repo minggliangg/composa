@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { temporal } from 'zundo'
-import type { CompositionState, Layer } from '../types/layer'
+import type { CompositionState, Layer, TextContent } from '../types/layer'
 import type { SelectionMode } from './selection'
-import { quantizePatch } from '../canvas/quantize'
+import { quantize, quantizePatch } from '../canvas/quantize'
+import { MIN_LAYER_SIZE } from '../canvas/resize'
+import { measureText, normalizeTextContent } from '../text/textMetrics'
 
 /**
  * Zustand composition store — the single source of truth every UI surface reads
@@ -60,6 +62,20 @@ export interface CompositionStore extends CompositionState {
   updateLayersTransform: (updates: LayerTransformUpdate[]) => void
   /** Set a layer's opacity, clamped to [0, 1]. */
   updateLayerOpacity: (id: string, opacity: number) => void
+  /** Rename a layer. Trims the value and maps a blank result to `null` (revert
+   *  to the derived display label). No-op on an unknown id or an unchanged name.
+   *  Lives in `layers`, so undo/redo works for free. */
+  renameLayer: (id: string, name: string) => void
+  /** Patch a text layer's content/style. Recomputes natural dims from the merged
+   *  payload and preserves the caller-supplied `scale` (captured once when the
+   *  edit gesture starts), anchoring top-left. A SINGLE set() — `quantizePatch`
+   *  can't carry natural dims, so this can't delegate to the transform seam
+   *  without costing a second history entry. No-op on a non-text / unknown id. */
+  updateLayerText: (
+    id: string,
+    patch: Partial<TextContent>,
+    scale?: number,
+  ) => void
   /** Revert one or more layers to their source aspect ratio, holding each
    *  layer's current width and re-anchoring so the center stays put (D2: keep
    *  width + center anchor). Routed through the shared transform seam, so each
@@ -242,6 +258,64 @@ export const useCompositionStore = create<CompositionStore>()(
       ),
       isDirty: true,
     })),
+
+  renameLayer: (id, name) =>
+    set((state) => {
+      const idx = state.layers.findIndex((l) => l.id === id)
+      if (idx === -1) return state
+      // Trim; a blank result reverts to the derived label (null).
+      const next = name.trim() === '' ? null : name.trim()
+      const target = state.layers[idx]
+      if (target.name === next) return state
+      const layers = state.layers.slice()
+      layers[idx] = { ...target, name: next }
+      return { layers, isDirty: true }
+    }),
+
+  updateLayerText: (id, patch, scale) =>
+    set((state) => {
+      const idx = state.layers.findIndex((l) => l.id === id)
+      if (idx === -1) return state
+      const target = state.layers[idx]
+      if (target.fullResBytesRef.kind !== 'text') return state
+      // Merge the patch into the current text payload, normalizing any content.
+      const current = target.fullResBytesRef.text
+      const next: TextContent = { ...current }
+      if (patch.content !== undefined)
+        next.content = normalizeTextContent(patch.content)
+      if (patch.fontSize !== undefined) next.fontSize = patch.fontSize
+      if (patch.fontWeight !== undefined) next.fontWeight = patch.fontWeight
+      if (patch.italic !== undefined) next.italic = patch.italic
+      if (patch.fill !== undefined) next.fill = patch.fill
+      if (patch.align !== undefined) next.align = patch.align
+
+      // Recompute natural dims from the merged payload.
+      const measured = measureText(next.content, next.fontSize)
+      // Preserve the scale factor: take it from the caller (captured once when
+      // the edit gesture began), NOT re-derived per keystroke from an
+      // already-rounded width (that accumulates visible drift). Anchored
+      // top-left, so x/y are untouched.
+      const s =
+        scale ?? (target.naturalWidth > 0 ? target.width / target.naturalWidth : 1)
+      let width = quantize(measured.width * s)
+      let height = quantize(measured.height * s)
+      // Floor at MIN_LAYER_SIZE: a one-char 12px layer has naturalWidth ≈ 7,
+      // below the resize floor. NOTE: clamping breaks the preserve-scale
+      // invariant on that axis (documented, accepted).
+      if (width < MIN_LAYER_SIZE) width = MIN_LAYER_SIZE
+      if (height < MIN_LAYER_SIZE) height = MIN_LAYER_SIZE
+
+      const layers = state.layers.slice()
+      layers[idx] = {
+        ...target,
+        width,
+        height,
+        naturalWidth: measured.width,
+        naturalHeight: measured.height,
+        fullResBytesRef: { kind: 'text', text: next },
+      }
+      return { layers, isDirty: true }
+    }),
 
   resetLayersAspect: (ids) =>
     // Hold each layer's current width, derive height = width / naturalRatio,

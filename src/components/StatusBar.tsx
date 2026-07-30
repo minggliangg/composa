@@ -59,6 +59,8 @@ export function StatusBar() {
   const lastSavedAt = useUiState((s) => s.lastSavedAt)
   const zoomBy = useUiState((s) => s.zoomBy)
   const resetView = useUiState((s) => s.resetView)
+  const snapEnabled = useUiState((s) => s.snapEnabled)
+  const setSnapEnabled = useUiState((s) => s.setSnapEnabled)
 
   // 1s ticker so "saved Xs ago" stays fresh. Only this component re-renders.
   const [now, setNow] = useState(() => Date.now())
@@ -154,6 +156,23 @@ export function StatusBar() {
           data-testid="zoom-fit"
         >
           fit
+        </button>
+        <Sep />
+        <button
+          type="button"
+          onClick={() => setSnapEnabled(!snapEnabled)}
+          aria-pressed={snapEnabled}
+          aria-label="Toggle snap to guides"
+          title="Snap to guides (hold Alt while dragging to invert)"
+          className={
+            'rounded px-1 font-sans transition-colors focus:outline-none focus:ring-2 focus:ring-fg-muted/40 ' +
+            (snapEnabled
+              ? 'bg-primary/15 text-accent hover:bg-primary/25'
+              : 'text-fg-muted hover:bg-raised-hover hover:text-fg')
+          }
+          data-testid="snap-toggle"
+        >
+          snap
         </button>
         {lastSavedAt !== null && (
           <>

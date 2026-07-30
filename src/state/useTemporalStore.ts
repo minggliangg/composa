@@ -53,15 +53,40 @@ export function snapshotTracked(): TrackedComposition {
 }
 
 /**
+ * Current nesting depth of overlapping gestures.
+ *
+ * Text editing + canvas drags can overlap: with a `<textarea>` focused, a canvas
+ * `pointerdown` fires BEFORE the textarea's `blur`, so the text gesture's
+ * `commitGesture` (on blur) would otherwise `resume()` history tracking in the
+ * MIDDLE of a drag — after which every `pointermove` becomes its own undo
+ * entry. Pausing/resuming is therefore depth-counted: we pause only on the
+ * 0→1 transition and resume only on the 1→0 transition, so the inner commit
+ * (the blur, while a drag is in flight) does NOT resume tracking.
+ *
+ * Inner commits (depth > 0 after decrement) are pure no-ops — they neither
+ * resume nor push a history entry; only the OUTERMOST commit resumes tracking
+ * and pushes its snapshot. That collapses an overlapped blur+drag into a single
+ * undo step instead of flooding the stack.
+ */
+let gestureDepth = 0
+
+/**
  * Begin a coalesced gesture: snapshot the pre-gesture composition and pause
  * history tracking so the high-frequency pointer-move writes don't each become
  * a history entry. Returns the snapshot to hand to `commitGesture`.
+ *
+ * Pausing is depth-counted (see `gestureDepth`): only the first (outermost)
+ * begin actually pauses; nested begins just bump the counter. Every caller
+ * should still pair this with a `commitGesture` so the depth stays balanced.
  *
  * Call on pointer-down, AFTER resolving selection but BEFORE the first move.
  */
 export function beginGesture(): TrackedComposition {
   const before = snapshotTracked()
-  useCompositionStore.temporal.getState().pause()
+  if (gestureDepth === 0) {
+    useCompositionStore.temporal.getState().pause()
+  }
+  gestureDepth += 1
   return before
 }
 
@@ -73,9 +98,18 @@ export function beginGesture(): TrackedComposition {
  * If the gesture produced no net change (pointer-down with no move), nothing is
  * recorded — the snapshot is discarded and history is untouched.
  *
+ * Nested gestures (depth > 0 after the decrement) do NOT resume tracking here;
+ * only the outermost commit (depth back to 0) resumes and pushes. See
+ * `gestureDepth`.
+ *
  * Call on pointer-up / pointer-cancel.
  */
 export function commitGesture(before: TrackedComposition): void {
+  // Decrement first. If gestures are still nested, this is an inner commit: do
+  // nothing beyond the counter — do NOT resume (a drag may still be in flight).
+  gestureDepth = Math.max(0, gestureDepth - 1)
+  if (gestureDepth > 0) return
+
   const temporal = useCompositionStore.temporal
   // Resume first so our direct setState below isn't itself ignored, and so
   // subsequent discrete actions are tracked normally.

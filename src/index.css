@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Atkinson Hyperlegible Mono (OFL-1.1) — the text-layer face. Both the normal
+ * and italic variable axes; the canvas reads these @font-face rules directly,
+ * and the export embeds the same woff2 bytes (see export/fontEmbed.ts). */
+@import "@fontsource-variable/atkinson-hyperlegible-mono/wght.css";
+@import "@fontsource-variable/atkinson-hyperlegible-mono/wght-italic.css";
 
 /*
  * Class-driven dark mode. Tailwind v4 defaults to `prefers-color-scheme`, but
