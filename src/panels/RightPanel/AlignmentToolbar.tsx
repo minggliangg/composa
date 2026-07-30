@@ -7,17 +7,19 @@
  *
  *   - Align to canvas   — needs >= 1 selected layer.
  *   - Align to selection — needs >= 2 (aligns to the selection bounding box).
- *   - Distribute        — needs >= 3 (equalizes center spacing).
+ *   - Even spread        — needs >= 2 (equalizes the GAP between layers).
+ *   - Frame              — needs >= 1 (draws a border around the selection).
  *
  * The base image is never aligned (it pins the canvas). The toolbar is only
  * shown when at least one layer is selected.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useCompositionStore } from '../../state/compositionStore'
 import {
   alignToCanvas,
   alignToSelection,
-  distribute,
+  spaceEvenly,
 } from '../../canvas/align'
 import type {
   AlignRect,
@@ -25,7 +27,8 @@ import type {
   DistributeAxis,
 } from '../../canvas/align'
 import type { Layer } from '../../types/layer'
-import { isLayerDistorted, isLayerResized } from './transformValidation'
+import { createFrameLayer, DEFAULT_FRAME_PADDING } from '../../composition/frameLayer'
+import { isLayerDistorted, isLayerResized, parseLayerNumber } from './transformValidation'
 
 /** Geometry of the alignment-bar drawn inside a 16x16 icon, per target. */
 const BAR_GEOM: Record<AlignTarget, { x: number; y: number; w: number; h: number }> = {
@@ -56,8 +59,8 @@ const SELECTION_TARGETS: { target: AlignTarget; label: string }[] = [
 ]
 
 const DISTRIBUTE_AXES: { axis: DistributeAxis; label: string }[] = [
-  { axis: 'horizontal', label: 'Distribute horizontal spacing' },
-  { axis: 'vertical', label: 'Distribute vertical spacing' },
+  { axis: 'horizontal', label: 'Space evenly with equal horizontal gaps' },
+  { axis: 'vertical', label: 'Space evenly with equal vertical gaps' },
 ]
 
 function AlignIcon({ target }: { target: AlignTarget }) {
@@ -87,18 +90,20 @@ function AlignIcon({ target }: { target: AlignTarget }) {
   )
 }
 
-function DistributeIcon({ axis }: { axis: DistributeAxis }) {
+/** Even-spread icon: three bars with EQUAL visible gaps but UNEQUAL widths,
+ *  so it reads as gap-equalizing (not center-equalizing like DistributeIcon). */
+function SpreadIcon({ axis }: { axis: DistributeAxis }) {
   const bars =
     axis === 'horizontal'
       ? [
-          { x: 1.5, y: 4, w: 2.5, h: 8 },
-          { x: 6.75, y: 4, w: 2.5, h: 8 },
-          { x: 12, y: 4, w: 2.5, h: 8 },
+          { x: 1.5, y: 4, w: 2, h: 8 },
+          { x: 6, y: 4, w: 4, h: 8 },
+          { x: 12.5, y: 4, w: 2, h: 8 },
         ]
       : [
-          { x: 4, y: 1.5, w: 8, h: 2.5 },
-          { x: 4, y: 6.75, w: 8, h: 2.5 },
-          { x: 4, y: 12, w: 8, h: 2.5 },
+          { x: 4, y: 1.5, w: 8, h: 2 },
+          { x: 4, y: 6, w: 8, h: 4 },
+          { x: 4, y: 12.5, w: 8, h: 2 },
         ]
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -113,6 +118,26 @@ function DistributeIcon({ axis }: { axis: DistributeAxis }) {
           fill="currentColor"
         />
       ))}
+    </svg>
+  )
+}
+
+/** An outer stroked rect (the frame) with a small filled rect inside (the
+ *  framed content) — the "frame the selection" gesture. */
+function FrameIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect
+        x="2.25"
+        y="2.25"
+        width="11.5"
+        height="11.5"
+        rx="1"
+        stroke="currentColor"
+        strokeOpacity="0.7"
+        strokeWidth="1.2"
+      />
+      <rect x="6" y="6" width="4" height="4" rx="0.75" fill="currentColor" />
     </svg>
   )
 }
@@ -236,6 +261,15 @@ export function AlignmentToolbar() {
   const resetLayersToOriginalSize = useCompositionStore(
     (s) => s.resetLayersToOriginalSize,
   )
+  const addOverlay = useCompositionStore((s) => s.addOverlay)
+
+  // Draft for the spread gap field. Empty (after trim) means AUTO — derive the
+  // gap from the edge elements. Declared ABOVE the `!canvas` early return so the
+  // Rules of Hooks hold regardless of which branch renders.
+  const [gapDraft, setGapDraft] = useState('')
+  // Draft for the frame padding field. Empty (after trim) means the default
+  // (DEFAULT_FRAME_PADDING).
+  const [framePaddingDraft, setFramePaddingDraft] = useState('')
 
   if (!canvas) return null
 
@@ -254,6 +288,22 @@ export function AlignmentToolbar() {
 
   if (rects.length === 0) return null
   const n = rects.length
+
+  // Gap parsing. parseLayerNumber returns null for BOTH empty and invalid, so
+  // empty-means-auto needs an explicit trim check — otherwise typing `abc`
+  // (invalid) would silently trigger auto. `null` gap = AUTO (derive from the
+  // edge elements); a number = a FIXED pixel gap.
+  const gapTrimmed = gapDraft.trim()
+  const gapValue = gapTrimmed === '' ? null : parseLayerNumber(gapTrimmed)
+  const gapInvalid = gapTrimmed !== '' && gapValue === null
+  const autoUnavailable = gapValue === null && n < 3
+
+  // Frame padding parsing. Empty (after trim) means the default; otherwise a
+  // fixed pixel gap from the content to the frame border.
+  const framePaddingTrimmed = framePaddingDraft.trim()
+  const framePaddingValue =
+    framePaddingTrimmed === '' ? null : parseLayerNumber(framePaddingTrimmed)
+  const framePaddingInvalid = framePaddingTrimmed !== '' && framePaddingValue === null
   // Any selected overlay whose rendered ratio drifts from its source can be
   // reverted; the button is inert when every selection already matches.
   const anyDistorted = selectedOverlays.some(isLayerDistorted)
@@ -295,18 +345,56 @@ export function AlignmentToolbar() {
         ))}
       </Group>
 
-      <Group legend="Distribute" min={3} count={n}>
+      <Group legend="Even spread" min={2} count={n}>
+        <input
+          type="number"
+          step={0.5}
+          placeholder="auto"
+          value={gapDraft}
+          onChange={(e) => setGapDraft(e.target.value)}
+          className="h-8 w-16 rounded-md border border-border bg-raised px-2 font-mono text-xs tabular-nums text-fg focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-fg-muted/40"
+          aria-label="Even spread gap (empty = auto)"
+          data-testid="spread-gap"
+        />
         {DISTRIBUTE_AXES.map(({ axis, label }) => (
           <ToolButton
             key={axis}
             label={label}
-            testId={`distribute-${axis}`}
-            disabled={n < 3}
-            onClick={() => updateLayersTransform(distribute(rects, axis))}
+            testId={`spread-${axis}`}
+            disabled={gapInvalid || autoUnavailable}
+            onClick={() =>
+              updateLayersTransform(spaceEvenly(rects, axis, gapValue))
+            }
           >
-            <DistributeIcon axis={axis} />
+            <SpreadIcon axis={axis} />
           </ToolButton>
         ))}
+      </Group>
+
+      <Group legend="Frame" min={1} count={n}>
+        <input
+          type="number"
+          step={0.5}
+          min={0}
+          placeholder="padding"
+          value={framePaddingDraft}
+          onChange={(e) => setFramePaddingDraft(e.target.value)}
+          className="h-8 w-20 rounded-md border border-border bg-raised px-2 font-mono text-xs tabular-nums text-fg focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-fg-muted/40"
+          aria-label="Frame padding (empty = default)"
+          data-testid="frame-padding"
+        />
+        <ToolButton
+          label="Frame the selection"
+          testId="frame-selection"
+          disabled={framePaddingInvalid}
+          onClick={() => {
+            const padding = framePaddingValue ?? DEFAULT_FRAME_PADDING
+            const frame = createFrameLayer(selectedOverlays, { padding })
+            if (frame) addOverlay(frame)
+          }}
+        >
+          <FrameIcon />
+        </ToolButton>
       </Group>
 
       {/* Revert each selected layer to its source aspect ratio (hold width,

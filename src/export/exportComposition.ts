@@ -90,6 +90,9 @@ export async function exportComposition(): Promise<ExportResult> {
           // Text resolves synchronously — no WASM, no cache. The builder lays
           // out the lines from the same pure `layoutText` the canvas uses.
           source = { kind: 'text', text: ref.text }
+        } else if (ref.kind === 'rect') {
+          // A plain rectangle (frame) resolves synchronously — no WASM, no cache.
+          source = { kind: 'rect', fill: ref.fill }
         } else {
           const cached = fullResCache.get(ref.file)
           if (cached !== undefined) {

@@ -1,7 +1,8 @@
-import type { CompositionState, TextContent } from '../types/layer'
+import type { CompositionState, Layer, TextContent } from '../types/layer'
 import { xmlEscapeAttr } from './xmlEscape'
-import { assignLayerIds } from './layerIds'
+import { assignLayerIds, borderIdKey } from './layerIds'
 import { layoutText, textAlignAnchor, TEXT_FONT_FAMILY } from '../text/textMetrics'
+import { borderRect } from '../canvas/border'
 import type { EmbeddedFontFace } from './fontEmbed'
 
 /**
@@ -48,6 +49,31 @@ export type LayerSource =
   | { kind: 'svg'; inner: string; viewBox: string }
   | { kind: 'blank'; fill: string }
   | { kind: 'text'; text: TextContent }
+  | { kind: 'rect'; fill: string | null }
+
+/**
+ * The border <rect> line for a layer, or '' when it has none. A TOP-LEVEL
+ * SIBLING emitted immediately AFTER the layer's own element, in the SAME
+ * layerLines entry, so: paint order is right (it sits above the layer, whose
+ * border is outward so there is no double-blend); the layer's own element stays
+ * the FIRST element of its entry (`querySelector('rect')` still finds a blank
+ * base); no <g> is introduced (the export must contain zero <g>); and it is NOT
+ * inside a nested <svg>, whose `preserveAspectRatio="none"` would scale the
+ * stroke anisotropically.
+ *
+ * Carries only `id` + `data-role="border"` — deliberately NO data-name and NO
+ * data-filename, so the "exactly one [data-name]" and per-layer filename
+ * assertions keep counting layer elements only.
+ */
+function borderRectLine(layer: Layer, borderId: string): string {
+  const r = borderRect(layer)
+  if (r === null) return ''
+  return (
+    `\n  <rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}"` +
+    ` fill="none" stroke="${r.color}" stroke-width="${r.strokeWidth}"` +
+    ` opacity="${layer.opacity}" id="${borderId}" data-role="border" />`
+  )
+}
 
 /**
  * Build a single self-contained SVG document string from canonical composition
@@ -63,10 +89,14 @@ export type LayerSource =
  *   <svg xmlns xmlns:xlink width height viewBox>
  *     <metadata>{ JSON: appName, appVersion, exportedAt, canvasW/H, layerCount }</metadata>
  *     <per layer, ascending z-index>:
- *       raster → <image href ... preserveAspectRatio="none" ... />
- *       blank  → <rect x y width height fill opacity ... />
- *       svg    → <svg x y width height viewBox preserveAspectRatio="none" opacity ...>inner</svg>
+ *       raster → <image href ... preserveAspectRatio="none" ... /> [+ border?]
+ *       blank  → <rect x y width height fill opacity ... />            [+ border?]
+ *       rect   → <rect x y width height fill opacity ... />            [+ border?]
+ *       svg    → <svg x y width height viewBox preserveAspectRatio="none" opacity ...>inner</svg> [+ border?]
+ *       text   → <svg ...><text/></svg>                                [+ border?]
  *   </svg>
+ *   (A layer's border <rect>, when present, is the immediately-following
+ *   SIBLING of that layer's own element — see `borderRectLine`.)
  *
  * @throws if `state.canvas` is null — the orchestrator must guard for "no base
  *   image" before calling. Throwing here keeps the contract explicit.
@@ -119,6 +149,12 @@ export function buildSvgDocument(
     const filenameAttr = ` data-filename="${xmlEscapeAttr(layer.originalFilename)}"`
     const nameAttr =
       layer.name !== null ? ` data-name="${xmlEscapeAttr(layer.name)}"` : ''
+    // The layer's border line ('' when it has none). Emitted as the immediately-
+    // following sibling of the layer's own element (see `borderRectLine`).
+    const borderLine = borderRectLine(
+      layer,
+      idMap.get(borderIdKey(layer.id)) ?? '',
+    )
 
     if (source.kind === 'raster') {
       // Embedded full-resolution image. Byte-identical to the pre-svg export.
@@ -133,7 +169,7 @@ export function buildSvgDocument(
         `${idAttr}` +
         `${filenameAttr}` +
         `${nameAttr}` +
-        `${roleAttr} />`
+        `${roleAttr} />` + borderLine
       )
     }
 
@@ -149,7 +185,7 @@ export function buildSvgDocument(
         `${idAttr}` +
         `${filenameAttr}` +
         `${nameAttr}` +
-        `${roleAttr} />`
+        `${roleAttr} />` + borderLine
       )
     }
 
@@ -185,7 +221,27 @@ export function buildSvgDocument(
         `${italicAttr}` +
         ` fill="${source.text.fill}"` +
         ` text-anchor="${anchor}">${tspans}</text>` +
-        `</svg>`
+        `</svg>` + borderLine
+      )
+    }
+
+    if (source.kind === 'rect') {
+      // A plain rectangle layer (today only created by Frame selection). A
+      // transparent (`fill: null`) frame paints nothing here — its `border` is
+      // the visible frame, emitted as the immediately-following sibling by
+      // `borderLine`. `fill` comes from parseHexColor/null, so unescaped emission
+      // matches the existing `blank` arm.
+      return (
+        `  <rect x="${layer.x}"` +
+        ` y="${layer.y}"` +
+        ` width="${layer.width}"` +
+        ` height="${layer.height}"` +
+        ` fill="${source.fill ?? 'none'}"` +
+        ` opacity="${layer.opacity}"` +
+        `${idAttr}` +
+        `${filenameAttr}` +
+        `${nameAttr}` +
+        `${roleAttr} />` + borderLine
       )
     }
 
@@ -203,7 +259,7 @@ export function buildSvgDocument(
       `${nameAttr}` +
       `${roleAttr}>` +
       source.inner +
-      `</svg>`
+      `</svg>` + borderLine
     )
   })
 

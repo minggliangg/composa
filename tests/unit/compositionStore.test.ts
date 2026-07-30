@@ -930,3 +930,77 @@ describe('resetLayersToOriginalSize (revert to source pixel dimensions)', () => 
   })
 })
 
+
+describe('compositionStore — setLayersBorder', () => {
+  function setup3(): string[] {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const a = makeOverlayLayer('a.png', 0, 0)
+    const b = makeOverlayLayer('b.png', 50, 50)
+    const c = makeOverlayLayer('c.png', 100, 100)
+    store().addOverlay(a)
+    store().addOverlay(b)
+    store().addOverlay(c)
+    return [a.id, b.id, c.id]
+  }
+
+  it('sets a (normalized) border on every id in one update', () => {
+    const [a, b, c] = setup3()
+    store().setLayersBorder([a, b, c], {
+      color: '#aabbcc',
+      width: 3,
+      padding: 2,
+    })
+    const layers = useCompositionStore.getState().layers
+    for (const id of [a, b, c]) {
+      const l = layers.find((x) => x.id === id)!
+      expect(l.border).toEqual({ color: '#aabbcc', width: 3, padding: 2 })
+    }
+  })
+
+  it('with null removes the border', () => {
+    const [a, b] = setup3()
+    store().setLayersBorder([a, b], { color: '#cccccc', width: 1, padding: 0 })
+    store().setLayersBorder([a], null)
+    const layers = useCompositionStore.getState().layers
+    expect(layers.find((l) => l.id === a)!.border).toBeUndefined()
+    // b is untouched.
+    expect(layers.find((l) => l.id === b)!.border).toBeDefined()
+  })
+
+  it('ignores unknown ids', () => {
+    const [a] = setup3()
+    store().setLayersBorder([a, 'does-not-exist'], {
+      color: '#cccccc',
+      width: 1,
+      padding: 0,
+    })
+    const layers = useCompositionStore.getState().layers
+    expect(layers.find((l) => l.id === a)!.border).toBeDefined()
+  })
+
+  it('records no change (and no dirty flip) for an empty id list', () => {
+    setup3()
+    const before = useCompositionStore.getState()
+    store().setLayersBorder([], { color: '#cccccc', width: 1, padding: 0 })
+    const after = useCompositionStore.getState()
+    // Returns the previous state: same layers ref, isDirty unchanged.
+    expect(after.layers).toBe(before.layers)
+  })
+
+  it('marks the composition dirty', () => {
+    const [a] = setup3()
+    // setup3 sets a base + overlays, flipping isDirty true already; reset and
+    // markClean to isolate the dirty flip from setLayersBorder.
+    store().markClean()
+    expect(useCompositionStore.getState().isDirty).toBe(false)
+    store().setLayersBorder([a], { color: '#cccccc', width: 1, padding: 0 })
+    expect(useCompositionStore.getState().isDirty).toBe(true)
+  })
+
+  it('normalizes values through the seam ({padding:-5, width:0.7, color:red})', () => {
+    const [a] = setup3()
+    store().setLayersBorder([a], { padding: -5, width: 0.7, color: 'red' })
+    const l = useCompositionStore.getState().layers.find((x) => x.id === a)!
+    expect(l.border).toEqual({ padding: 0, width: 0.5, color: '#cccccc' })
+  })
+})

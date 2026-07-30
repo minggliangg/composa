@@ -19,6 +19,9 @@
  *   - `text`: a styled text layer (Atkinson Hyperlegible Mono), rendered live on
  *     the canvas and embedded — font and all — in the export. (The `text` arm is
  *     added to this union in Step 6 alongside its store action.)
+ *   - `rect`: a plain rectangle; today its only creation path is Frame
+ *     selection — a transparent (`fill: null`) box whose `border` is the visible
+ *     frame.
  */
 export type FullResBytesRef =
   | { kind: 'file'; file: File }
@@ -26,6 +29,7 @@ export type FullResBytesRef =
   | { kind: 'svg'; markup: string; viewBox: string }
   | { kind: 'blank'; fill: string }
   | { kind: 'text'; text: TextContent }
+  | { kind: 'rect'; fill: string | null }
 
 /**
  * Payload of a text layer. All rendering geometry is derived PURELY from these
@@ -42,6 +46,22 @@ export interface TextContent {
   /** Fill colour, `#rrggbb`. */
   fill: string
   align: 'left' | 'center' | 'right'
+}
+
+/**
+ * A border painted OUTSIDE a layer's box (see `canvas/border.ts`). The stroke is
+ * pushed outward so it never covers the enclosed asset — the only way to break
+ * that is a negative `padding`, which the store clamps away in `normalizeBorder`.
+ */
+export interface LayerBorder {
+  /** Stroke colour, a LITERAL `#rrggbb`. Never a `var(--…)` token: the export is
+   *  standalone (same rule as a text layer's `fill`). */
+  color: string
+  /** Stroke thickness in CANVAS units. `<= 0` paints nothing. */
+  width: number
+  /** Gap between the asset edge and the border's inner edge. Always `>= 0`: a
+   *  negative padding is the only way the border could cover the asset. */
+  padding: number
 }
 
 /**
@@ -92,6 +112,10 @@ export interface Layer {
   locked: boolean
   /** Whether this layer is the composition's base image (sets canvas size). */
   isBaseImage: boolean
+  /** Optional border painted OUTSIDE this layer's box (see `canvas/border.ts`).
+   *  Absent = no border. Lives in `layers`, so zundo's `partialize` makes it
+   *  undoable for free. */
+  border?: LayerBorder
 }
 
 /** Canvas dimensions, equal to the base image's natural pixel size. */

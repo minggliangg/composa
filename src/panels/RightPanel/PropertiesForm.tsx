@@ -26,6 +26,7 @@ import {
   parseLayerNumber,
 } from './transformValidation'
 import { TextControls } from './TextControls'
+import { BorderControls } from './BorderControls'
 
 type Field = 'x' | 'y' | 'width' | 'height'
 
@@ -267,6 +268,12 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
       </fieldset>
 
       {layer.fullResBytesRef.kind === 'text' && <TextControls layer={layer} />}
+
+      {/* Borders are per-OVERLAY. The base fills the canvas exactly, so an
+          OUTWARD border on it would land entirely outside the exported viewBox
+          (clipped) while the editor's overflow="visible" canvas would still
+          draw it. */}
+      {!layer.isBaseImage && <BorderControls layer={layer} />}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
