@@ -3,6 +3,7 @@ import { reencodeOriginal } from '../wasm/imageProcessor'
 import { buildSvgDocument } from './buildSvgDocument'
 import type { LayerSource } from './buildSvgDocument'
 import { namespaceSvgMarkup } from './svgNamespace'
+import { collectFontFaces } from './fontEmbed'
 import { downloadFile } from './downloadFile'
 
 /**
@@ -85,6 +86,10 @@ export async function exportComposition(): Promise<ExportResult> {
           source = { kind: 'svg', inner: ns.inner, viewBox: ns.viewBox }
         } else if (ref.kind === 'blank') {
           source = { kind: 'blank', fill: ref.fill }
+        } else if (ref.kind === 'text') {
+          // Text resolves synchronously — no WASM, no cache. The builder lays
+          // out the lines from the same pure `layoutText` the canvas uses.
+          source = { kind: 'text', text: ref.text }
         } else {
           const cached = fullResCache.get(ref.file)
           if (cached !== undefined) {
@@ -104,10 +109,15 @@ export async function exportComposition(): Promise<ExportResult> {
     return { ok: false, reason: 'reencode_failed', code: code || undefined }
   }
 
+  // Embed the font faces a text layer needs (lazy woff2 fetch + base64). No text
+  // layers -> [] -> no <defs> in the output.
+  const fontFaces = await collectFontFaces(state.layers)
+
   const svg = buildSvgDocument(state, sources, {
     timestamp: new Date().toISOString(),
     appVersion: APP_VERSION,
     appName: APP_NAME,
+    fontFaces,
   })
 
   downloadFile('composition.svg', new Blob([svg], { type: 'image/svg+xml' }))

@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { xmlEscapeAttr } from '../../src/export/xmlEscape'
-import { buildSvgDocument } from '../../src/export/buildSvgDocument'
+import {
+  buildSvgDocument,
+  FONT_COPYRIGHT,
+  FONT_LICENSE,
+} from '../../src/export/buildSvgDocument'
 import type { LayerSource } from '../../src/export/buildSvgDocument'
+import type { EmbeddedFontFace } from '../../src/export/fontEmbed'
 import { namespaceSvgMarkup } from '../../src/export/svgNamespace'
-import type { CompositionState, Layer } from '../../src/types/layer'
+import { layoutText, measureText } from '../../src/text/textMetrics'
+import type { CompositionState, Layer, TextContent } from '../../src/types/layer'
 
 /**
  * Phase 08 export unit tests.
@@ -20,6 +26,7 @@ function makeLayer(partial: Partial<Layer>): Layer {
   return {
     id: 'id',
     originalFilename: 'x.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: 'blob:x',
     fullResBytesRef: { kind: 'file', file: new File([], 'x.png') },
@@ -48,7 +55,7 @@ const FIXED_STATE: CompositionState = {
     makeLayer({
       id: 'overlay-2',
       originalFilename: 'top.png',
-      x: 200,
+      name: null,      x: 200,
       y: 150,
       width: 120,
       height: 90,
@@ -58,7 +65,7 @@ const FIXED_STATE: CompositionState = {
     makeLayer({
       id: 'base',
       originalFilename: 'base.png',
-      x: 0,
+      name: null,      x: 0,
       y: 0,
       width: 800,
       height: 600,
@@ -71,7 +78,7 @@ const FIXED_STATE: CompositionState = {
       id: 'overlay-1',
       // Filename with every XML-special char to exercise escaping end-to-end.
       originalFilename: 'photo & friends.png',
-      x: 50,
+      name: null,      x: 50,
       y: 40,
       width: 100,
       height: 80,
@@ -298,7 +305,7 @@ describe('buildSvgDocument', () => {
         makeLayer({
           id: 'blank-base',
           originalFilename: 'blank-1024.svg',
-          zIndex: 0,
+          name: null,          zIndex: 0,
           isBaseImage: true,
           x: 0,
           y: 0,
@@ -337,6 +344,7 @@ describe('buildSvgDocument', () => {
         makeLayer({
           id: 'svg-ovl',
           originalFilename: 'logo.svg',
+          name: null,
           mimeType: 'image/svg+xml',
           fullResBytesRef: { kind: 'svg', markup, viewBox: '0 0 24 24' },
           zIndex: 1,
@@ -385,6 +393,7 @@ describe('buildSvgDocument', () => {
       makeLayer({
         id,
         originalFilename: 'logo.svg',
+        name: null,
         mimeType: 'image/svg+xml',
         fullResBytesRef: { kind: 'svg', markup, viewBox: '0 0 10 10' },
         zIndex: z,
@@ -418,5 +427,224 @@ describe('buildSvgDocument', () => {
     // Both namespaces are present (two layers, two prefixes).
     expect(markupA).toContain('id="L1__r"')
     expect(markupA).toContain('id="L2__r"')
+  })
+})
+
+// --- ids + text + font embedding -----------------------------------------
+
+describe('buildSvgDocument — exported ids', () => {
+  function parse(svg: string) {
+    return new DOMParser().parseFromString(svg, 'image/svg+xml')
+  }
+
+  it('gives every layer element a unique id', () => {
+    const svg = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS)
+    const doc = parse(svg)
+    const els = Array.from(doc.querySelectorAll('image,rect,svg > svg'))
+    const ids = els.map((e) => e.getAttribute('id'))
+    expect(ids.every((id) => id !== null)).toBe(true)
+    expect(new Set(ids).size).toBe(ids.length) // all unique
+  })
+
+  it('keeps ids stable across two builds of the same input', () => {
+    const a = parse(buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS))
+    const b = parse(buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS))
+    const ids = (doc: Document) =>
+      Array.from(doc.querySelectorAll('image,rect,svg > svg')).map((e) =>
+        e.getAttribute('id'),
+      )
+    expect(ids(a)).toEqual(ids(b))
+  })
+
+  it('emits data-name only for layers with a custom name', () => {
+    const state: CompositionState = {
+      ...FIXED_STATE,
+      layers: FIXED_STATE.layers.map((l, i) =>
+        i === 0 ? { ...l, name: 'hero' } : { ...l, name: null },
+      ),
+    }
+    const doc = parse(buildSvgDocument(state, FIXED_SOURCES, FIXED_OPTS))
+    const named = Array.from(doc.querySelectorAll('[data-name]'))
+    expect(named).toHaveLength(1)
+    expect(named[0].getAttribute('data-name')).toBe('hero')
+  })
+})
+
+describe('buildSvgDocument — text layers', () => {
+  function parse(svg: string) {
+    return new DOMParser().parseFromString(svg, 'image/svg+xml')
+  }
+
+  const textContent: TextContent = {
+    content: 'Hello\nWorld',
+    fontSize: 10,
+    fontWeight: 400,
+    italic: false,
+    fill: '#000000',
+    align: 'left',
+  }
+
+  function textState(): CompositionState {
+    const measured = measureText(textContent.content, textContent.fontSize)
+    return {
+      canvas: { width: 200, height: 200 },
+      layers: [
+        makeLayer({
+          id: 'base',
+          originalFilename: 'b.png',
+          isBaseImage: true,
+          zIndex: 0,
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 200,
+          naturalWidth: 200,
+          naturalHeight: 200,
+        }),
+        makeLayer({
+          id: 'txt',
+          originalFilename: 'Text',
+          name: null,
+          mimeType: 'text/plain',
+          fullResBytesRef: { kind: 'text', text: textContent },
+          zIndex: 1,
+          x: 10,
+          y: 10,
+          width: measured.width,
+          height: measured.height,
+          naturalWidth: measured.width,
+          naturalHeight: measured.height,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+  }
+
+  const textSources: Record<string, LayerSource> = {
+    base: { kind: 'blank', fill: '#ffffff' },
+    txt: { kind: 'text', text: textContent },
+  }
+
+  it('emits a text layer as a nested <svg> + <text>/<tspan> and NO hit-rect', () => {
+    const svg = buildSvgDocument(textState(), textSources, FIXED_OPTS)
+    const doc = parse(svg)
+    const nested = doc.querySelector('svg > svg')
+    expect(nested).not.toBeNull()
+    expect(nested!.querySelector('text')).not.toBeNull()
+    expect(nested!.querySelectorAll('tspan').length).toBe(2)
+    // The editor-only hit-rect must NOT leak into the export.
+    expect(nested!.querySelectorAll('rect')).toHaveLength(0)
+  })
+
+  it('emits <tspan> coordinates equal to layoutText for the same input (anti-drift)', () => {
+    const svg = buildSvgDocument(textState(), textSources, FIXED_OPTS)
+    const doc = parse(svg)
+    const tspans = Array.from(doc.querySelectorAll('svg > svg text tspan'))
+    const expected = layoutText(textContent)
+    expect(tspans.map((t) => t.getAttribute('x'))).toEqual(
+      expected.map((l) => String(l.x)),
+    )
+    expect(tspans.map((t) => t.getAttribute('y'))).toEqual(
+      expected.map((l) => String(l.y)),
+    )
+  })
+
+  it('round-trips text containing & and < through the DOM parser', () => {
+    const tricky: TextContent = { ...textContent, content: 'a & b < c' }
+    const measured = measureText(tricky.content, tricky.fontSize)
+    const state: CompositionState = {
+      canvas: { width: 100, height: 100 },
+      layers: [
+        makeLayer({
+          id: 't',
+          fullResBytesRef: { kind: 'text', text: tricky },
+          zIndex: 0,
+          isBaseImage: true,
+          width: 100,
+          height: 100,
+          naturalWidth: 100,
+          naturalHeight: 100,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+    const doc = parse(
+      buildSvgDocument(
+        state,
+        { t: { kind: 'text', text: tricky } },
+        FIXED_OPTS,
+      ),
+    )
+    expect(doc.querySelector('tspan')!.textContent).toBe('a & b < c')
+  })
+})
+
+describe('buildSvgDocument — font embedding', () => {
+  function parse(svg: string) {
+    return new DOMParser().parseFromString(svg, 'image/svg+xml')
+  }
+
+  const faces: EmbeddedFontFace[] = [
+    { style: 'normal', dataUri: 'data:font/woff2;base64,Bg==NORMAL' },
+    { style: 'italic', dataUri: 'data:font/woff2;base64,Bg==ITALIC' },
+  ]
+
+  it('emits no <defs>/<style> when fontFaces is empty', () => {
+    const svg = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS)
+    const doc = parse(svg)
+    expect(doc.querySelectorAll('defs')).toHaveLength(0)
+    expect(doc.querySelectorAll('style')).toHaveLength(0)
+    expect(svg).not.toContain('@font-face')
+  })
+
+  it('emits one @font-face per face with format(woff2) and the OFL notice', () => {
+    const svg = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, {
+      ...FIXED_OPTS,
+      fontFaces: faces,
+    })
+    const doc = parse(svg)
+    // One <defs><style> block.
+    expect(doc.querySelectorAll('defs')).toHaveLength(1)
+    expect(doc.querySelectorAll('style')).toHaveLength(1)
+    const css = doc.querySelector('style')!.textContent ?? ''
+    // Two @font-face rules, one per face.
+    expect(css.match(/@font-face/g)).toHaveLength(2)
+    // format('woff2') — NOT the legacy 'woff2-variations' token.
+    expect(css).toContain("format('woff2')")
+    expect(css).not.toContain('woff2-variations')
+    // Variable weight axis preserved.
+    expect(css).toContain('font-weight: 200 800')
+    // Both data URIs embedded.
+    expect(css).toContain('Bg==NORMAL')
+    expect(css).toContain('Bg==ITALIC')
+    // The OFL notice comment carries the copyright + licence.
+    expect(svg).toContain(FONT_COPYRIGHT)
+    expect(svg).toContain('scripts.sil.org/OFL')
+  })
+
+  it('records the font licence + copyright in the metadata', () => {
+    const doc = parse(
+      buildSvgDocument(FIXED_STATE, FIXED_SOURCES, {
+        ...FIXED_OPTS,
+        fontFaces: faces,
+      }),
+    )
+    const json = JSON.parse(
+      doc.querySelector('metadata')!.textContent ?? '{}',
+    )
+    expect(json.fontLicense).toBe(FONT_LICENSE)
+    expect(json.fontCopyright).toBe(FONT_COPYRIGHT)
+  })
+
+  it('has no "--" sequence inside the OFL notice comment (well-formed XML)', () => {
+    const svg = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, {
+      ...FIXED_OPTS,
+      fontFaces: faces,
+    })
+    const comment = svg.slice(svg.indexOf('<!--'), svg.indexOf('-->'))
+    // The comment body (between <!-- and -->) must not contain "--".
+    expect(comment.includes('--', 4)).toBe(false)
   })
 })

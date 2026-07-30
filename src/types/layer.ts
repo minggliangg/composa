@@ -16,12 +16,33 @@
  *     embedded as a nested `<svg>` so vector fidelity survives the round trip.
  *   - `blank`: a solid fill (e.g. `#ffffff`) for a blank-base template,
  *     exported as a literal `<rect>` rather than an embedded image.
+ *   - `text`: a styled text layer (Atkinson Hyperlegible Mono), rendered live on
+ *     the canvas and embedded — font and all — in the export. (The `text` arm is
+ *     added to this union in Step 6 alongside its store action.)
  */
 export type FullResBytesRef =
   | { kind: 'file'; file: File }
   | { kind: 'reencoded'; dataUri: string }
   | { kind: 'svg'; markup: string; viewBox: string }
   | { kind: 'blank'; fill: string }
+  | { kind: 'text'; text: TextContent }
+
+/**
+ * Payload of a text layer. All rendering geometry is derived PURELY from these
+ * fields (the font is monospace, so metrics need no DOM measurement) — the
+ * canvas and the exporter compute identical boxes/lines from `textMetrics.ts`
+ * and can never drift.
+ */
+export interface TextContent {
+  content: string
+  fontSize: number
+  /** Variable-axis weight, 200..800. */
+  fontWeight: number
+  italic: boolean
+  /** Fill colour, `#rrggbb`. */
+  fill: string
+  align: 'left' | 'center' | 'right'
+}
 
 /**
  * A single image layer (the base image or an overlay).
@@ -34,6 +55,13 @@ export interface Layer {
   id: string
   /** Original filename, verbatim and never mutated. Display dedup is computed. */
   originalFilename: string
+  /**
+   * User-editable display name, or `null` to fall back to the text first-line
+   * (text layers) or `originalFilename`. Becomes the sanitized `id` attribute of
+   * the exported SVG element (see `layerIds.ts`); the verbatim value is also
+   * kept losslessly in `data-name`. Trims to `null` when blank.
+   */
+  name: string | null
   /** Declared MIME type (e.g. image/png). Authoritative format comes from WASM. */
   mimeType: string
   /** Object URL of the downscaled preview — the only thing ever rendered live. */

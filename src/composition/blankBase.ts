@@ -29,6 +29,7 @@ export function createBlankBaseLayer(size: number): Layer {
   return {
     id: createLayerId(),
     originalFilename: `blank-${size}.svg`,
+    name: null,
     mimeType: 'image/svg+xml',
     // Data URI: nothing to revoke. percent-encode so `#`/spaces/etc. are safe.
     previewUrl: `data:image/svg+xml,${encodeURIComponent(markup)}`,

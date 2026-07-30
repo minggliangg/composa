@@ -23,6 +23,7 @@ function layer(
   return {
     id,
     originalFilename: 'o.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:o-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },
@@ -61,6 +62,44 @@ describe('isLayerResized', () => {
     expect(isLayerResized(layer(0, 0, 200, 200))).toBe(false)
     expect(isLayerResized(layer(0, 100, 200, 200))).toBe(false)
     expect(isLayerResized(layer(100, 0, 200, 200))).toBe(false)
+  })
+
+  it('returns false for a text layer at its natural size (no epsilon needed)', () => {
+    // Text natural dims are quantized on-grid, so a freshly created text layer
+    // (rendered == natural) must read as "not resized" — the regression guard
+    // for the measureText snapping rule.
+    const id = createLayerId()
+    const textLayer: Layer = {
+      id,
+      originalFilename: 'Text',
+      name: null,
+      mimeType: 'text/plain',
+      previewUrl: '',
+      fullResBytesRef: {
+        kind: 'text',
+        text: {
+          content: 'Text',
+          fontSize: 10,
+          fontWeight: 400,
+          italic: false,
+          fill: '#000000',
+          align: 'left',
+        },
+      },
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      naturalWidth: 100,
+      naturalHeight: 100,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      visible: true,
+      locked: false,
+      isBaseImage: false,
+    }
+    expect(isLayerResized(textLayer)).toBe(false)
   })
 })
 

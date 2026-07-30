@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { clampZoom, zoomAtPoint } from '../canvas/viewport'
 import type { ViewPoint } from '../canvas/viewport'
+import type { SnapGuide } from '../canvas/snap'
+
+/** Stable sentinel for "no active guides" so clearing is an identity no-op. */
+const NO_GUIDES: readonly SnapGuide[] = Object.freeze([])
 
 /**
  * Ephemeral UI state that history should NEVER see.
@@ -34,6 +38,11 @@ export interface UiState {
   pan: ViewPoint
   /** Is the Space bar currently held? Drives pan cursor + pointer-bail. */
   spaceHeld: boolean
+  /** Is snap-to-guides on by default? Alt INVERTS this during a drag (see
+   *  useCanvasPointer). Default false = free drag, hold Alt to snap. */
+  snapEnabled: boolean
+  /** Active alignment guides for the current drag (empty when none). */
+  snapGuides: readonly SnapGuide[]
   /** Publish the current fitted canvas scale (called from CompositionCanvas). */
   setScale: (scale: number) => void
   /** Stamp a successful save/export (called from TopBar). */
@@ -49,6 +58,11 @@ export interface UiState {
   resetView: () => void
   /** Record whether the Space bar is held (for pan cursor + pointer-bail). */
   setSpaceHeld: (held: boolean) => void
+  /** Toggle whether snap-to-guides is on by default (Alt inverts it mid-drag). */
+  setSnapEnabled: (enabled: boolean) => void
+  /** Publish the active drag guides. Identity-dedupe (like setScale) so clearing
+   *  to the stable empty sentinel never re-renders. */
+  setSnapGuides: (guides: readonly SnapGuide[]) => void
 }
 
 export const useUiState = create<UiState>((set) => ({
@@ -57,6 +71,8 @@ export const useUiState = create<UiState>((set) => ({
   zoom: 1,
   pan: { x: 0, y: 0 },
   spaceHeld: false,
+  snapEnabled: false,
+  snapGuides: NO_GUIDES,
   setScale: (scale) => set((prev) => (prev.scale === scale ? prev : { scale })),
   markSaved: () => set({ lastSavedAt: Date.now() }),
   setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
@@ -69,4 +85,10 @@ export const useUiState = create<UiState>((set) => ({
   setPan: (pan) => set({ pan }),
   resetView: () => set({ zoom: 1, pan: { x: 0, y: 0 } }),
   setSpaceHeld: (held) => set((prev) => (prev.spaceHeld === held ? prev : { spaceHeld: held })),
+  setSnapEnabled: (enabled) =>
+    set((prev) => (prev.snapEnabled === enabled ? prev : { snapEnabled: enabled })),
+  setSnapGuides: (guides) =>
+    set((prev) =>
+      prev.snapGuides === guides ? prev : { snapGuides: guides },
+    ),
 }))

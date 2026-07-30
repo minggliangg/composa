@@ -31,6 +31,7 @@ function makeBaseLayer(naturalWidth: number, naturalHeight: number): Layer {
   return {
     id,
     originalFilename: 'base.png',
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:base-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], 'base.png') },
@@ -54,6 +55,7 @@ function makeOverlayLayer(name: string): Layer {
   return {
     id,
     originalFilename: name,
+    name: null,
     mimeType: 'image/png',
     previewUrl: `blob:overlay-${id}`,
     fullResBytesRef: { kind: 'file', file: new File([], name) },
@@ -302,6 +304,71 @@ describe('history — gesture coalescing (commit-only pattern)', () => {
     expect(store().layers).toHaveLength(1)
     redo()
     expect(store().layers).toHaveLength(2)
+  })
+})
+
+describe('history — re-entrant (nested) gestures', () => {
+  // Text editing + canvas drags can overlap: a canvas pointerdown fires before
+  // a focused textarea's blur, so gestures nest. The depth-counted pause/resume
+  // must collapse the whole stack to ONE undo step and never resume tracking on
+  // an inner commit.
+
+  it('nested begin/commit yields exactly ONE entry, not two', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png')
+    store().addOverlay(overlay)
+    const pre = temporal().pastStates.length
+
+    // Outer gesture begins; then an inner gesture begins and commits inside it.
+    const snapA = beginGesture()
+    store().updateLayerTransform(overlay.id, { x: 20 })
+    const snapB = beginGesture()
+    store().updateLayerTransform(overlay.id, { x: 30 })
+    commitGesture(snapB) // inner commit — must NOT resume or push
+    store().updateLayerTransform(overlay.id, { x: 40 })
+    commitGesture(snapA) // outer commit — resumes + pushes the pre-gesture state
+
+    expect(temporal().pastStates.length).toBe(pre + 1) // exactly one entry
+    // The live state reflects the final move.
+    expect(store().layers.find((l) => l.id === overlay.id)?.x).toBe(40)
+    // A single undo reverts the whole nested stack in one step.
+    temporal().undo()
+    expect(store().layers.find((l) => l.id === overlay.id)?.x).toBe(10)
+    expect(temporal().pastStates.length).toBe(pre)
+  })
+
+  it('an inner commit does NOT resume tracking', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png')
+    store().addOverlay(overlay)
+
+    const snapA = beginGesture()
+    const snapB = beginGesture()
+    commitGesture(snapB) // inner commit — depth still 1, tracking must stay paused
+
+    // If tracking had resumed here, this write would record its own entry.
+    const before = temporal().pastStates.length
+    store().updateLayerTransform(overlay.id, { x: 50 })
+    expect(temporal().pastStates.length).toBe(before) // still paused → no entry
+
+    commitGesture(snapA) // outer commit finally resumes + pushes
+    expect(temporal().pastStates.length).toBe(before + 1)
+  })
+
+  it('a nested no-op records nothing', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const overlay = makeOverlayLayer('o1.png')
+    store().addOverlay(overlay)
+    const pre = temporal().pastStates.length
+
+    const snapA = beginGesture()
+    const snapB = beginGesture()
+    // …no moves…
+    commitGesture(snapB) // inner no-op
+    commitGesture(snapA) // outer no-op — no net change → nothing pushed
+
+    expect(temporal().pastStates.length).toBe(pre)
+    expect(temporal().futureStates).toHaveLength(0)
   })
 })
 
