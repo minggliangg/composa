@@ -13,7 +13,7 @@
 
 /** User-facing copy for the "I don't recognize these bytes" code. */
 const UNSUPPORTED_FORMAT =
-  'Unsupported image format. Use PNG, JPEG, GIF, or WebP.'
+  'Unsupported image format. Use PNG, JPEG, GIF, WebP, or SVG.'
 
 /** User-facing copy for the "bytes looked valid but failed to decode" code. */
 const DECODE_FAILED = 'This image appears to be corrupt or truncated.'
@@ -22,13 +22,22 @@ const DECODE_FAILED = 'This image appears to be corrupt or truncated.'
 const DIMENSIONS_TOO_LARGE =
   'This image is too large (max 12000px per side).'
 
+/** User-facing copy for the "SVG text failed to parse / wasn't an <svg>" code. */
+const SVG_PARSE_FAILED =
+  'This SVG could not be parsed. Check that it is valid SVG markup.'
+
+/** User-facing copy for the "SVG source text exceeded the byte cap" code. */
+const SVG_TOO_LARGE = 'This SVG is too large (max 2 MB of source text).'
+
 /** Fallback for any code the WASM layer did not document (forward-compat). */
 const UNKNOWN_ERROR = 'Could not process this image. Try a different file.'
 
 /**
- * Return user-facing copy for a stable WASM error code. Unknown codes fall
- * back to a generic message so a future Rust-side code never renders as
- * `undefined` in the UI.
+ * Return user-facing copy for a stable error code. These originated on the
+ * Rust/WASM side, but the SVG path (parsed in TS) reuses the same code→copy
+ * table — `svg_parse_failed` / `svg_too_large` are emitted by `parseSvgSource`,
+ * and `dimensions_too_large` is shared with the raster cap. Unknown codes fall
+ * back to a generic message so a future code never renders as `undefined`.
  */
 export function wasmErrorMessage(code: string): string {
   switch (code) {
@@ -38,6 +47,10 @@ export function wasmErrorMessage(code: string): string {
       return DECODE_FAILED
     case 'dimensions_too_large':
       return DIMENSIONS_TOO_LARGE
+    case 'svg_parse_failed':
+      return SVG_PARSE_FAILED
+    case 'svg_too_large':
+      return SVG_TOO_LARGE
     default:
       return UNKNOWN_ERROR
   }

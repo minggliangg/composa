@@ -1,22 +1,21 @@
 /**
  * Status footer — a thin live readout strip at the bottom of the editor that
- * makes composa feel like a real instrument (think Figma's bottom bar). Pure
- * presentation: it reads layer/selection/canvas/dirty state from the
- * composition store and the fitted scale + last-saved timestamp from the
- * parallel `uiState` store. It writes nothing.
+ * makes composa feel like a real instrument (think Figma's bottom bar). Reads
+ * layer/selection/canvas/dirty state from the composition store and the fitted
+ * scale + last-saved timestamp + viewport zoom from the parallel `uiState`
+ * store. It ALSO writes the viewport: the zoom cluster dispatches `zoomBy` /
+ * `resetView` (the only thing this "readout" component mutates).
  *
  * Three clusters, justified between:
  *   - LEFT  — save state: a status dot + label (Saved / Unsaved changes / Ready).
  *   - CENTER— composition scope: "N layers" and "M selected" when relevant.
- *   - RIGHT — figures in the mono face + tabular-nums: canvas W×H, fit zoom %,
- *             and a relative "saved Xs ago" that ticks once per second.
+ *   - RIGHT — figures in the mono face + tabular-nums: canvas W×H, then a zoom
+ *             cluster (− / readout / + / fit) and a relative "saved Xs ago".
  *
- * The relative-time ticker is a 1s `setInterval` kept in local state so it only
- * re-renders THIS component (not the store subscribers). It's a deliberately
- * coarse grain: sub-second precision is noise here.
- *
- * No tests assert on this component; it is purely additive DOM and intersects
- * none of the existing e2e locators.
+ * The `{zoomPct}%` readout shows the MEASURED effective scale (fit × zoom), so
+ * it needs no maths of its own — the zoom buttons move `zoom`, which
+ * re-measures, which updates the readout. The relative-time ticker is a 1s
+ * `setInterval` kept in local state so it only re-renders THIS component.
  */
 import { useEffect, useState } from 'react'
 import { useCompositionStore } from '../state/compositionStore'
@@ -48,6 +47,9 @@ function Sep() {
   return <span className="text-fg-subtle/50">·</span>
 }
 
+/** Multiplier per zoom-button click (about 4 clicks per doubling). */
+const ZOOM_STEP = 1.25
+
 export function StatusBar() {
   const layers = useCompositionStore((s) => s.layers)
   const selectedCount = useCompositionStore((s) => s.selectedLayerIds.length)
@@ -55,6 +57,8 @@ export function StatusBar() {
   const isDirty = useCompositionStore((s) => s.isDirty)
   const scale = useUiState((s) => s.scale)
   const lastSavedAt = useUiState((s) => s.lastSavedAt)
+  const zoomBy = useUiState((s) => s.zoomBy)
+  const resetView = useUiState((s) => s.resetView)
 
   // 1s ticker so "saved Xs ago" stays fresh. Only this component re-renders.
   const [now, setNow] = useState(() => Date.now())
@@ -120,7 +124,37 @@ export function StatusBar() {
           <span>—</span>
         )}
         <Sep />
-        <span>{zoomPct}%</span>
+        <button
+          type="button"
+          onClick={() => zoomBy(1 / ZOOM_STEP)}
+          aria-label="Zoom out"
+          title="Zoom out"
+          className="rounded px-1 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+          data-testid="zoom-out"
+        >
+          −
+        </button>
+        <span data-testid="zoom-readout">{zoomPct}%</span>
+        <button
+          type="button"
+          onClick={() => zoomBy(ZOOM_STEP)}
+          aria-label="Zoom in"
+          title="Zoom in"
+          className="rounded px-1 text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+          data-testid="zoom-in"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => resetView()}
+          aria-label="Fit to panel"
+          title="Fit to panel"
+          className="rounded px-1 font-sans text-fg-muted transition-colors hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+          data-testid="zoom-fit"
+        >
+          fit
+        </button>
         {lastSavedAt !== null && (
           <>
             <Sep />

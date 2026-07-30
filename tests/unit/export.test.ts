@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { xmlEscapeAttr } from '../../src/export/xmlEscape'
 import { buildSvgDocument } from '../../src/export/buildSvgDocument'
+import type { LayerSource } from '../../src/export/buildSvgDocument'
+import { namespaceSvgMarkup } from '../../src/export/svgNamespace'
 import type { CompositionState, Layer } from '../../src/types/layer'
 
 /**
@@ -81,10 +83,10 @@ const FIXED_STATE: CompositionState = {
   isDirty: true,
 }
 
-const FIXED_URIS: Record<string, string> = {
-  base: 'data:image/png;base64,BASE==',
-  'overlay-1': 'data:image/png;base64,ONE==',
-  'overlay-2': 'data:image/png;base64,TWO==',
+const FIXED_SOURCES: Record<string, LayerSource> = {
+  base: { kind: 'raster', dataUri: 'data:image/png;base64,BASE==' },
+  'overlay-1': { kind: 'raster', dataUri: 'data:image/png;base64,ONE==' },
+  'overlay-2': { kind: 'raster', dataUri: 'data:image/png;base64,TWO==' },
 }
 
 const FIXED_OPTS = {
@@ -139,7 +141,7 @@ describe('buildSvgDocument', () => {
     return new DOMParser().parseFromString(svg, 'image/svg+xml')
   }
 
-  const svg = buildSvgDocument(FIXED_STATE, FIXED_URIS, FIXED_OPTS)
+  const svg = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS)
 
   it('root <svg> has width/height/viewBox from the base canvas', () => {
     const doc = parse(svg)
@@ -218,7 +220,7 @@ describe('buildSvgDocument', () => {
         l.id === 'overlay-1' ? { ...l, opacity: 0.5 } : l,
       ),
     }
-    const built = buildSvgDocument(stateWithOpacity, FIXED_URIS, FIXED_OPTS)
+    const built = buildSvgDocument(stateWithOpacity, FIXED_SOURCES, FIXED_OPTS)
     const doc = parse(built)
     const images = Array.from(doc.querySelectorAll('image'))
     // base (z=0), overlay-1 (z=1, opacity 0.5), overlay-2 (z=2, default opacity).
@@ -232,7 +234,9 @@ describe('buildSvgDocument', () => {
     const images = Array.from(doc.querySelectorAll('image'))
     const ids = ['base', 'overlay-1', 'overlay-2']
     images.forEach((img, i) => {
-      expect(img.getAttribute('href')).toBe(FIXED_URIS[ids[i]])
+      const s = FIXED_SOURCES[ids[i]]
+      expect(s.kind).toBe('raster')
+      if (s.kind === 'raster') expect(img.getAttribute('href')).toBe(s.dataUri)
     })
   })
 
@@ -256,8 +260,8 @@ describe('buildSvgDocument', () => {
   })
 
   it('is deterministic: identical inputs yield byte-identical output', () => {
-    const a = buildSvgDocument(FIXED_STATE, FIXED_URIS, FIXED_OPTS)
-    const b = buildSvgDocument(FIXED_STATE, FIXED_URIS, FIXED_OPTS)
+    const a = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS)
+    const b = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, FIXED_OPTS)
     expect(a).toBe(b)
   })
 
@@ -274,7 +278,7 @@ describe('buildSvgDocument', () => {
   })
 
   it('omits data-role entirely on overlays and uses default appName', () => {
-    const built = buildSvgDocument(FIXED_STATE, FIXED_URIS, {
+    const built = buildSvgDocument(FIXED_STATE, FIXED_SOURCES, {
       timestamp: FIXED_OPTS.timestamp,
       appVersion: FIXED_OPTS.appVersion,
     })
@@ -283,5 +287,136 @@ describe('buildSvgDocument', () => {
       doc.querySelector('metadata')!.textContent ?? '{}',
     )
     expect(json.appName).toBe('composa.')
+  })
+
+  // --- blank + svg LayerSource kinds ---------------------------------------
+
+  it('emits a blank layer as a solid <rect> with the fill', () => {
+    const state: CompositionState = {
+      canvas: { width: 1024, height: 1024 },
+      layers: [
+        makeLayer({
+          id: 'blank-base',
+          originalFilename: 'blank-1024.svg',
+          zIndex: 0,
+          isBaseImage: true,
+          x: 0,
+          y: 0,
+          width: 1024,
+          height: 1024,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+    const sources: Record<string, LayerSource> = {
+      'blank-base': { kind: 'blank', fill: '#ffffff' },
+    }
+    const built = buildSvgDocument(state, sources, FIXED_OPTS)
+    const doc = parse(built)
+    expect(doc.querySelectorAll('image')).toHaveLength(0)
+    const rect = doc.querySelector('rect')
+    expect(rect).not.toBeNull()
+    expect(rect!.getAttribute('fill')).toBe('#ffffff')
+    expect(rect!.getAttribute('width')).toBe('1024')
+    expect(rect!.getAttribute('height')).toBe('1024')
+    expect(rect!.getAttribute('data-role')).toBe('base')
+    expect(rect!.getAttribute('data-filename')).toBe('blank-1024.svg')
+  })
+
+  it('emits an svg layer as a nested <svg> carrying the namespaced body', () => {
+    const markup =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+      '<defs><linearGradient id="g1"><stop stop-color="red"/></linearGradient></defs>' +
+      '<rect width="24" height="24" fill="url(#g1)"/>' +
+      '</svg>'
+    const ns = namespaceSvgMarkup(markup, 'L1')
+    const state: CompositionState = {
+      canvas: { width: 100, height: 100 },
+      layers: [
+        makeLayer({
+          id: 'svg-ovl',
+          originalFilename: 'logo.svg',
+          mimeType: 'image/svg+xml',
+          fullResBytesRef: { kind: 'svg', markup, viewBox: '0 0 24 24' },
+          zIndex: 1,
+          isBaseImage: false,
+          x: 10,
+          y: 10,
+          width: 40,
+          height: 40,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+    const sources: Record<string, LayerSource> = {
+      'svg-ovl': { kind: 'svg', inner: ns.inner, viewBox: ns.viewBox },
+    }
+    const built = buildSvgDocument(state, sources, FIXED_OPTS)
+    const doc = parse(built)
+    // The nested <svg> carries the layer geometry + the namespaced body.
+    const nested = doc.querySelector('svg > svg')
+    expect(nested).not.toBeNull()
+    expect(nested!.getAttribute('x')).toBe('10')
+    expect(nested!.getAttribute('width')).toBe('40')
+    expect(nested!.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(nested!.getAttribute('preserveAspectRatio')).toBe('none')
+    expect(nested!.getAttribute('data-role')).toBeNull() // overlay, not base
+    // The id was namespaced (L1__g1) and the url() reference rewritten to match.
+    expect(built).toContain('id="L1__g1"')
+    expect(built).toContain('fill="url(#L1__g1)"')
+    // No editor-only content leaks in.
+    expect(doc.querySelectorAll('[data-handle]')).toHaveLength(0)
+    expect(doc.querySelectorAll('[data-editor-only]')).toHaveLength(0)
+  })
+
+  it('is deterministic with random layer ids (prefix is the sorted index, not id)', () => {
+    // Two builds of the SAME composition but with DIFFERENT random layer ids
+    // must still agree byte-for-byte: the svg namespace prefix is `L<n>`, never
+    // the layer id, so a UUID can't leak into the emitted markup.
+    const markup =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">' +
+      '<rect id="r" width="10" height="10"/></svg>'
+    // Namespacing depends only on the prefix (the sorted index), not the id.
+    const inner1 = namespaceSvgMarkup(markup, 'L1')
+    const inner2 = namespaceSvgMarkup(markup, 'L2')
+    const mk = (id: string, z: number): Layer =>
+      makeLayer({
+        id,
+        originalFilename: 'logo.svg',
+        mimeType: 'image/svg+xml',
+        fullResBytesRef: { kind: 'svg', markup, viewBox: '0 0 10 10' },
+        zIndex: z,
+        isBaseImage: false,
+        x: 5,
+        y: 5,
+        width: 20,
+        height: 20,
+      })
+    const build = (id1: string, id2: string): string => {
+      const sources: Record<string, LayerSource> = {
+        [id1]: { kind: 'svg', inner: inner1.inner, viewBox: inner1.viewBox },
+        [id2]: { kind: 'svg', inner: inner2.inner, viewBox: inner2.viewBox },
+      }
+      return buildSvgDocument(
+        {
+          canvas: { width: 50, height: 50 },
+          layers: [mk(id1, 1), mk(id2, 2)],
+          selectedLayerIds: [],
+          isDirty: false,
+        },
+        sources,
+        FIXED_OPTS,
+      )
+    }
+    const markupA = build('aaaaaaaa-1111-1111-1111-111111111111', 'bbbbbbbb-2222-2222-2222-222222222222')
+    const markupB = build('zzzzzzzz-9999-9999-9999-999999999999', 'yyyyyyyy-8888-8888-8888-888888888888')
+    expect(markupA).toBe(markupB)
+    // And the body carries no uuid.
+    expect(markupA).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/)
+    // Both namespaces are present (two layers, two prefixes).
+    expect(markupA).toContain('id="L1__r"')
+    expect(markupA).toContain('id="L2__r"')
   })
 })

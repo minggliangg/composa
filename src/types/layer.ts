@@ -10,10 +10,18 @@
  * Where a layer's full-resolution bytes live. Until WASM re-encoding lands
  * (Phase 07/08) uploads are held as the original `File`; after re-encoding the
  * normalized data URI is cached here for export.
+ *
+ * Two extra kinds resolve SYNCHRONOUSLY at export and never touch WASM:
+ *   - `svg`: sanitized SVG markup (root guaranteed to carry a `viewBox`),
+ *     embedded as a nested `<svg>` so vector fidelity survives the round trip.
+ *   - `blank`: a solid fill (e.g. `#ffffff`) for a blank-base template,
+ *     exported as a literal `<rect>` rather than an embedded image.
  */
 export type FullResBytesRef =
   | { kind: 'file'; file: File }
   | { kind: 'reencoded'; dataUri: string }
+  | { kind: 'svg'; markup: string; viewBox: string }
+  | { kind: 'blank'; fill: string }
 
 /**
  * A single image layer (the base image or an overlay).

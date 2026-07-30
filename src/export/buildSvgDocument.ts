@@ -16,6 +16,20 @@ export interface BuildOptions {
 }
 
 /**
+ * How a single layer contributes to the exported document. `svg`/`blank`
+ * resolve synchronously upstream in `exportComposition` (no WASM); the builder
+ * just emits them.
+ *   - `raster`: today's embedded `<image>`.
+ *   - `blank`: a solid `<rect>` (a blank-base template).
+ *   - `svg`: a nested `<svg>` body (`inner`, already id/class-namespaced) + its
+ *     source `viewBox`, preserving vector fidelity.
+ */
+export type LayerSource =
+  | { kind: 'raster'; dataUri: string }
+  | { kind: 'svg'; inner: string; viewBox: string }
+  | { kind: 'blank'; fill: string }
+
+/**
  * Build a single self-contained SVG document string from canonical composition
  * state. PURE, synchronous, and deterministic: no DOM access, no async, no
  * `Date`/`Math.random` — the timestamp and version are passed in via `opts`.
@@ -23,13 +37,15 @@ export interface BuildOptions {
  * The SVG is assembled fresh from `state` (never by cloning the live editor
  * DOM). That guarantees no editor-only elements (selection handles, boundary
  * rect, preview-resolution `href`s) can leak into the exported file: only the
- * canonical `<image>` per layer, in ascending z-index order, is emitted.
+ * canonical per-layer element, in ascending z-index order, is emitted.
  *
  * Structure:
  *   <svg xmlns xmlns:xlink width height viewBox>
  *     <metadata>{ JSON: appName, appVersion, exportedAt, canvasW/H, layerCount }</metadata>
- *     <image href data-filename x y width height preserveAspectRatio="none" [data-role="base"] />
- *     ...
+ *     <per layer, ascending z-index>:
+ *       raster → <image href ... preserveAspectRatio="none" ... />
+ *       blank  → <rect x y width height fill opacity ... />
+ *       svg    → <svg x y width height viewBox preserveAspectRatio="none" opacity ...>inner</svg>
  *   </svg>
  *
  * @throws if `state.canvas` is null — the orchestrator must guard for "no base
@@ -37,7 +53,7 @@ export interface BuildOptions {
  */
 export function buildSvgDocument(
   state: CompositionState,
-  dataUris: Record<string, string>,
+  sources: Record<string, LayerSource>,
   opts: BuildOptions,
 ): string {
   const { canvas, layers } = state
@@ -65,19 +81,53 @@ export function buildSvgDocument(
   // Ascending z-index == back-to-front paint order (base = 0 first).
   const sorted = [...layers].sort((a, b) => a.zIndex - b.zIndex)
 
-  const imageLines = sorted.map((layer) => {
-    const uri = dataUris[layer.id] ?? ''
+  const layerLines = sorted.map((layer) => {
+    const source = sources[layer.id] ?? { kind: 'blank', fill: '#ffffff' }
     const roleAttr = layer.isBaseImage ? ' data-role="base"' : ''
+    const filenameAttr = ` data-filename="${xmlEscapeAttr(layer.originalFilename)}"`
+
+    if (source.kind === 'raster') {
+      // Embedded full-resolution image. Byte-identical to the pre-svg export.
+      return (
+        `  <image href="${xmlEscapeAttr(source.dataUri)}"` +
+        ` x="${layer.x}"` +
+        ` y="${layer.y}"` +
+        ` width="${layer.width}"` +
+        ` height="${layer.height}"` +
+        ` opacity="${layer.opacity}"` +
+        ` preserveAspectRatio="none"` +
+        `${filenameAttr}` +
+        `${roleAttr} />`
+      )
+    }
+
+    if (source.kind === 'blank') {
+      // A blank base: a literal solid rect (rasterizes correctly everywhere).
+      return (
+        `  <rect x="${layer.x}"` +
+        ` y="${layer.y}"` +
+        ` width="${layer.width}"` +
+        ` height="${layer.height}"` +
+        ` fill="${source.fill}"` +
+        ` opacity="${layer.opacity}"` +
+        `${filenameAttr}` +
+        `${roleAttr} />`
+      )
+    }
+
+    // svg: a nested <svg> body, namespaced upstream so duplicate ids can't collide.
     return (
-      `  <image href="${xmlEscapeAttr(uri)}"` +
-      ` x="${layer.x}"` +
+      `  <svg x="${layer.x}"` +
       ` y="${layer.y}"` +
       ` width="${layer.width}"` +
       ` height="${layer.height}"` +
-      ` opacity="${layer.opacity}"` +
+      ` viewBox="${source.viewBox}"` +
       ` preserveAspectRatio="none"` +
-      ` data-filename="${xmlEscapeAttr(layer.originalFilename)}"` +
-      `${roleAttr} />`
+      ` opacity="${layer.opacity}"` +
+      `${filenameAttr}` +
+      `${roleAttr}>` +
+      source.inner +
+      `</svg>`
     )
   })
 
@@ -85,8 +135,8 @@ export function buildSvgDocument(
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"` +
     ` width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n` +
     `  <metadata>${xmlEscapeAttr(metadata)}</metadata>\n` +
-    imageLines.join('\n') +
-    (imageLines.length > 0 ? '\n' : '') +
+    layerLines.join('\n') +
+    (layerLines.length > 0 ? '\n' : '') +
     `</svg>`
   )
 }

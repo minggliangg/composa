@@ -139,6 +139,18 @@ export function transparentPngFile(
 }
 
 /**
+ * An SVG file as a `{name, mimeType, buffer}` triple ready for `setInputFiles`.
+ * An SVG fixture is just a string — no CRC32 needed — so callers pass the raw
+ * markup. The viewBox sets the intrinsic size the app derives from it.
+ */
+export function svgFile(
+  name: string,
+  markup: string,
+): { name: string; mimeType: string; buffer: Buffer } {
+  return { name, mimeType: 'image/svg+xml', buffer: Buffer.from(markup, 'utf8') }
+}
+
+/**
  * Shared E2E setup: load the app, upload a base image (sets the canvas), wait
  * for it to render, then upload one overlay and wait for its `<image>` to
  * appear. Returns locators + the overlay's initial canvas-unit rect read from

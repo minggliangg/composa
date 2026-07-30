@@ -43,10 +43,23 @@ describe('validateImageFile — accepted cases', () => {
       ['c.jpeg', 'image/jpeg'],
       ['d.gif', 'image/gif'],
       ['e.webp', 'image/webp'],
+      ['f.svg', 'image/svg+xml'],
     ]
     for (const [name, mime] of cases) {
       expect(validateImageFile(file(name, mime))).toEqual({ ok: true })
     }
+  })
+
+  it('accepts an SVG by extension even with a generic MIME', () => {
+    expect(
+      validateImageFile(file('logo.svg', 'application/octet-stream')),
+    ).toEqual({ ok: true })
+  })
+
+  it('accepts an SVG by MIME even with a non-svg extension', () => {
+    expect(validateImageFile(file('logo.xml', 'image/svg+xml'))).toEqual({
+      ok: true,
+    })
   })
 
   it('accepts uppercase extensions (case-insensitive suffix match)', () => {

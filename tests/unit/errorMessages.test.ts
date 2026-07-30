@@ -9,7 +9,21 @@ import { wasmErrorMessage } from '../../src/upload/errorMessages'
 describe('wasmErrorMessage', () => {
   it('maps the unsupported_format code to readable copy', () => {
     const msg = wasmErrorMessage('unsupported_format')
-    expect(msg).toMatch(/PNG, JPEG, GIF, or WebP/)
+    expect(msg).toMatch(/PNG, JPEG, GIF, WebP/)
+    // Now mentions SVG too (the vector import path).
+    expect(msg).toMatch(/SVG/)
+  })
+
+  it('maps the svg_parse_failed code to readable copy', () => {
+    const msg = wasmErrorMessage('svg_parse_failed')
+    expect(msg.length).toBeGreaterThan(0)
+    expect(msg).toMatch(/svg/i)
+  })
+
+  it('maps the svg_too_large code to readable copy', () => {
+    const msg = wasmErrorMessage('svg_too_large')
+    expect(msg).toMatch(/large|big/i)
+    expect(msg).toMatch(/2 ?mb/i)
   })
 
   it('maps the decode_failed code to readable copy', () => {
@@ -43,6 +57,8 @@ describe('wasmErrorMessage', () => {
       'unsupported_format',
       'decode_failed',
       'dimensions_too_large',
+      'svg_parse_failed',
+      'svg_too_large',
     ] as const) {
       expect(wasmErrorMessage(code).length).toBeGreaterThan(0)
     }

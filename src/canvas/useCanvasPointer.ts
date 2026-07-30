@@ -27,6 +27,7 @@ import { useCompositionStore } from '../state/compositionStore'
 import type { TrackedComposition } from '../state/compositionStore'
 import { beginGesture, commitGesture } from '../state/useTemporalStore'
 import { selectionModeFromEvent } from '../state/selection'
+import { useUiState } from '../state/uiState'
 import { screenToCanvas } from './coords'
 import type { CanvasPoint } from './coords'
 
@@ -81,7 +82,12 @@ export function useCanvasPointer(
 
   const onPointerDown = useCallback(
     (e: PointerEvent) => {
-      if (e.button !== 0) return // primary button only
+      // Primary button only, and never when Space is held — a space-drag pans
+      // the viewport (handled at the canvas level) rather than moving a layer.
+      // Read `spaceHeld` fresh from the store (not subscribed) so this costs no
+      // re-render per layer.
+      if (e.button !== 0) return
+      if (useUiState.getState().spaceHeld) return
       const svg = svgRef.current
       if (!svg) return
 

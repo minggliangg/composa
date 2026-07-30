@@ -13,6 +13,7 @@
  */
 import type { RefObject } from 'react'
 import { useCompositionStore } from '../state/compositionStore'
+import { useUiState } from '../state/uiState'
 import { ResizeHandle } from './ResizeHandle'
 import { useCanvasScale } from './useCanvasScale'
 import type { ResizeHandleId } from './resize'
@@ -56,7 +57,8 @@ export function SelectionOverlay({ svgRef }: SelectionOverlayProps) {
   const layers = useCompositionStore((s) => s.layers)
   const selectedLayerIds = useCompositionStore((s) => s.selectedLayerIds)
   const canvas = useCompositionStore((s) => s.canvas)
-  const scale = useCanvasScale(svgRef, canvas)
+  const zoom = useUiState((s) => s.zoom)
+  const scale = useCanvasScale(svgRef, canvas, zoom)
 
   if (!canvas) return null
 

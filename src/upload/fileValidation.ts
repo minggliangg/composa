@@ -10,6 +10,7 @@ export const ACCEPTED_MIME_TYPES = [
   'image/jpeg',
   'image/gif',
   'image/webp',
+  'image/svg+xml',
 ] as const
 
 export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number]
@@ -21,6 +22,7 @@ export const ACCEPTED_EXTENSIONS = [
   '.jpeg',
   '.gif',
   '.webp',
+  '.svg',
 ] as const
 
 /** Type guard: does this MIME type claim to be one we might accept? */
@@ -54,4 +56,16 @@ export function validateImageFile(file: File): ImageFileValidation {
     return { ok: false, reason: 'unsupported_format' }
   }
   return { ok: true }
+}
+
+/**
+ * Is this an SVG file, by declared MIME OR filename suffix? SVG takes a
+ * separate, WASM-free decode path (`parseSvgSource`) — the WASM `image` crate
+ * cannot decode vector input, so callers branch on this BEFORE probing bytes.
+ */
+export function isSvgFile(file: File): boolean {
+  if (file.type === 'image/svg+xml') return true
+  const dot = file.name.lastIndexOf('.')
+  if (dot < 0) return false
+  return file.name.slice(dot).toLowerCase() === '.svg'
 }

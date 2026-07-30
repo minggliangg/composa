@@ -1,6 +1,8 @@
 import { useCompositionStore } from '../state/compositionStore'
 import { reencodeOriginal } from '../wasm/imageProcessor'
 import { buildSvgDocument } from './buildSvgDocument'
+import type { LayerSource } from './buildSvgDocument'
+import { namespaceSvgMarkup } from './svgNamespace'
 import { downloadFile } from './downloadFile'
 
 /**
@@ -37,10 +39,12 @@ const APP_VERSION = '0.1.0'
  *
  * Flow:
  *   1. Guard: no base image -> `{ ok: false, reason: 'no_base' }`.
- *   2. Resolve EVERY layer's full-res data URI. `{ kind: 'reencoded' }` layers
- *      use their cached URI; `{ kind: 'file' }` layers are re-encoded via the
- *      WASM worker (with a WeakMap cache so a re-export never re-encodes). All
- *      resolutions run in parallel.
+ *   2. Resolve EVERY layer's export source. `{ kind: 'svg' }` layers are
+ *      id/class-namespaced (synchronous, prefix = sorted index `L<n>`); blank
+ *      layers pass through; `{ kind: 'reencoded' }` use their cached URI;
+ *      `{ kind: 'file' }` layers are re-encoded via the WASM worker (with a
+ *      WeakMap cache so a re-export never re-encodes). All resolutions run in
+ *      parallel — only rasters can reject.
  *   3. If ANY layer fails to resolve, the whole export fails with
  *      `{ ok: false, reason: 'reencode_failed', code }` and NO file is
  *      downloaded — never produce a partial SVG.
@@ -55,36 +59,52 @@ export async function exportComposition(): Promise<ExportResult> {
     return { ok: false, reason: 'no_base' }
   }
 
-  // Resolve every layer's full-resolution data URI in parallel. A rejection in
-  // any single entry rejects the whole `Promise.all`, which is exactly the
-  // "fail the whole export" semantics we want.
-  let dataUris: Record<string, string>
+  // Resolve every layer's export source in parallel. `svg`/`blank` resolve
+  // synchronously (no WASM, no cache); only `file`/`reencoded` rasters can
+  // reject. A rejection in any single entry rejects the whole `Promise.all`,
+  // which is exactly the "fail the whole export" semantics we want.
+  //
+  // The svg id/class namespace prefix is the layer's SORTED (z-index) index
+  // `L0`, `L1`, … — NOT layer.id — so the emitted bytes stay deterministic.
+  const sorted = [...state.layers].sort((a, b) => a.zIndex - b.zIndex)
+  const sortedIndex = new Map(sorted.map((l, i) => [l.id, i] as const))
+
+  let sources: Record<string, LayerSource>
   try {
     const entries = await Promise.all(
       state.layers.map(async (layer) => {
         const ref = layer.fullResBytesRef
-        let uri: string
+        let source: LayerSource
         if (ref.kind === 'reencoded') {
-          uri = ref.dataUri
+          source = { kind: 'raster', dataUri: ref.dataUri }
+        } else if (ref.kind === 'svg') {
+          const ns = namespaceSvgMarkup(
+            ref.markup,
+            'L' + (sortedIndex.get(layer.id) ?? 0),
+          )
+          source = { kind: 'svg', inner: ns.inner, viewBox: ns.viewBox }
+        } else if (ref.kind === 'blank') {
+          source = { kind: 'blank', fill: ref.fill }
         } else {
           const cached = fullResCache.get(ref.file)
           if (cached !== undefined) {
-            uri = cached
+            source = { kind: 'raster', dataUri: cached }
           } else {
-            uri = await reencodeOriginal(ref.file)
+            const uri = await reencodeOriginal(ref.file)
             fullResCache.set(ref.file, uri)
+            source = { kind: 'raster', dataUri: uri }
           }
         }
-        return [layer.id, uri] as const
+        return [layer.id, source] as const
       }),
     )
-    dataUris = Object.fromEntries(entries)
+    sources = Object.fromEntries(entries)
   } catch (err) {
     const code = err instanceof Error ? err.message : ''
     return { ok: false, reason: 'reencode_failed', code: code || undefined }
   }
 
-  const svg = buildSvgDocument(state, dataUris, {
+  const svg = buildSvgDocument(state, sources, {
     timestamp: new Date().toISOString(),
     appVersion: APP_VERSION,
     appName: APP_NAME,

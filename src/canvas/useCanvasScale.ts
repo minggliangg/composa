@@ -35,10 +35,19 @@ export function computeCanvasScale(
  * Subscribe to the live screen-px-per-canvas-unit scale of `svgRef`. Re-measures
  * on mount, whenever the canvas dims change, and whenever the `<svg>` element
  * resizes (panel layout). Returns 1 until first measured.
+ *
+ * `zoom` (the viewport user-multiplier) is a dependency because the viewport is
+ * a CSS `transform: scale()` on an ancestor wrapper: a transform does NOT change
+ * the element's border box, so it fires no `ResizeObserver` callback. Without
+ * `zoom` in the deps the reported scale would go stale the moment you zoom, even
+ * though `getBoundingClientRect()` (used here) already reflects the transform.
+ * Pass the live `zoom` so the hook re-measures — and thus reports the EFFECTIVE
+ * scale (fit × zoom) that handle sizing and the status readout want.
  */
 export function useCanvasScale(
   svgRef: RefObject<SVGSVGElement | null>,
   canvas: CanvasConfig | null,
+  zoom = 1,
 ): number {
   const [scale, setScale] = useState(1)
 
@@ -53,7 +62,7 @@ export function useCanvasScale(
     const ro = new ResizeObserver(measure)
     ro.observe(svg)
     return () => ro.disconnect()
-  }, [svgRef, canvas])
+  }, [svgRef, canvas, zoom])
 
   return scale
 }

@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
-import type { CanvasConfig, Layer } from '../../types/layer'
+import type { CanvasConfig, FullResBytesRef, Layer } from '../../types/layer'
 import { createLayerId } from '../../types/layer'
 import { useCompositionStore } from '../../state/compositionStore'
 import {
   MAX_SOURCE_DIMENSION,
+  isSvgFile,
   validateImageFile,
 } from '../../upload/fileValidation'
 import { wasmErrorMessage } from '../../upload/errorMessages'
+import { parseSvgSource } from '../../upload/svgSource'
 import { probeDimensions, decodeAndDownscale } from '../../wasm/imageProcessor'
+import { BLANK_BASE_SIZES, createBlankBaseLayer } from '../../composition/blankBase'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 
-const ACCEPT_ATTR = 'image/png,image/jpeg,image/gif,image/webp'
+const ACCEPT_ATTR =
+  'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg'
 
 /**
  * Larger side of a decoded PREVIEW, in pixels. Previews are downscaled to this
@@ -30,20 +35,51 @@ interface DecodedImage {
   previewUrl: string
   naturalWidth: number
   naturalHeight: number
+  /** Full-resolution source for export — raster `File`, or sanitized SVG. */
+  fullResBytesRef: FullResBytesRef
 }
 
 /**
- * Worker-backed decode path (Phase 07). Probes the TRUE natural dimensions via
- * WASM magic-byte sniffing (authoritative — the declared MIME/extension can
- * lie), then decodes + downscales to `MAX_PREVIEW_DIM` in the Web Worker so
- * the UI thread never blocks. The original `File` is NOT consumed here; the
- * caller keeps it for full-resolution export.
+ * Decode an upload into a preview + natural dims + export source.
+ *
+ * SVG takes a WASM-FREE path: read as text, sanitize + size via
+ * `parseSvgSource`, and surface the sanitized markup both as a blob preview
+ * URL and as the `svg` `fullResBytesRef`. The blob URL renders in the
+ * browser's *secure static mode* (no script, no external fetches), so the live
+ * editor is safe regardless of sanitizer coverage; `revokePreview` in the store
+ * reclaims `blob:` URLs with zero changes.
+ *
+ * Everything else runs the worker-backed raster path: probe TRUE natural
+ * dimensions via WASM magic-byte sniffing (authoritative — the declared
+ * MIME/extension can lie), then decode + downscale to `MAX_PREVIEW_DIM` in the
+ * Web Worker so the UI thread never blocks. The original `File` is retained as
+ * the export source.
  *
  * `err.message` from the proxy is the stable WASM error code; we map it to
  * user-facing copy via `wasmErrorMessage` so this throws Error objects whose
  * `message` is already human-readable.
  */
 async function decodeImagePreview(file: File): Promise<DecodedImage> {
+  // SVG bypasses WASM entirely — the `image` crate cannot decode vectors.
+  if (isSvgFile(file)) {
+    const text = await file.text()
+    const result = parseSvgSource(text)
+    if (!result.ok) {
+      throw new Error(wasmErrorMessage(result.reason))
+    }
+    const blob = new Blob([result.markup], { type: 'image/svg+xml' })
+    return {
+      previewUrl: URL.createObjectURL(blob),
+      naturalWidth: result.naturalWidth,
+      naturalHeight: result.naturalHeight,
+      fullResBytesRef: {
+        kind: 'svg',
+        markup: result.markup,
+        viewBox: result.viewBox,
+      },
+    }
+  }
+
   let dims: { width: number; height: number }
   try {
     dims = await probeDimensions(file)
@@ -67,6 +103,7 @@ async function decodeImagePreview(file: File): Promise<DecodedImage> {
     previewUrl: URL.createObjectURL(previewBlob),
     naturalWidth: dims.width,
     naturalHeight: dims.height,
+    fullResBytesRef: { kind: 'file', file },
   }
 }
 
@@ -149,6 +186,9 @@ export function UploadDropzone() {
 
   const [errors, setErrors] = useState<UploadError[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  // Pending blank-size selection awaiting confirmation (only set when replacing
+  // an existing base — a fresh canvas needs no confirmation).
+  const [blankReplace, setBlankReplace] = useState<number | null>(null)
   // State updates are asynchronous, so use an immediate lock as well as
   // `isProcessing` to reject rapid picker events before the next render.
   const processingRef = useRef(false)
@@ -166,6 +206,26 @@ export function UploadDropzone() {
   const finishProcessing = (): void => {
     processingRef.current = false
     setIsProcessing(false)
+  }
+
+  /**
+   * Start from a blank canvas. With no existing base this is immediate; when a
+   * base already exists, route through the shared ConfirmDialog — replacing a
+   * base looks destructive even though overlays survive (setBaseImage keeps
+   * them). Mirrors the confirm pattern LayerList uses for delete.
+   */
+  const handleBlank = (size: number): void => {
+    if (hasBase) {
+      setBlankReplace(size)
+    } else {
+      setBaseImage(createBlankBaseLayer(size))
+    }
+  }
+
+  const confirmBlankReplace = (): void => {
+    if (blankReplace == null) return
+    setBaseImage(createBlankBaseLayer(blankReplace))
+    setBlankReplace(null)
   }
 
   const handleBaseFiles = async (files: FileList | File[]): Promise<void> => {
@@ -192,7 +252,7 @@ export function UploadDropzone() {
         originalFilename: file.name,
         mimeType: file.type,
         previewUrl: decoded.previewUrl,
-        fullResBytesRef: { kind: 'file', file },
+        fullResBytesRef: decoded.fullResBytesRef,
         x: 0,
         y: 0,
         width: decoded.naturalWidth,
@@ -259,7 +319,7 @@ export function UploadDropzone() {
             originalFilename: file.name,
             mimeType: file.type,
             previewUrl: decoded.previewUrl,
-            fullResBytesRef: { kind: 'file', file },
+            fullResBytesRef: decoded.fullResBytesRef,
             x: placement.x,
             y: placement.y,
             width: placement.width,
@@ -335,6 +395,26 @@ export function UploadDropzone() {
         </span>
       </label>
 
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-fg-muted">
+          or start from a blank canvas
+        </span>
+        <div className="grid grid-cols-4 gap-1.5">
+          {BLANK_BASE_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              onClick={() => handleBlank(size)}
+              disabled={isProcessing}
+              className="rounded-md border border-border bg-raised px-1 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-fg-muted hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+              data-testid={`blank-base-${size}`}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label
         onDragOver={onDragOver}
         onDrop={onDropOverlay}
@@ -385,6 +465,17 @@ export function UploadDropzone() {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={blankReplace !== null}
+        title="Replace the base?"
+        message={`Start a new ${blankReplace ?? ''}×${blankReplace ?? ''} blank canvas? Existing overlays are kept, but the current base will be replaced.`}
+        confirmLabel="Replace"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={confirmBlankReplace}
+        onCancel={() => setBlankReplace(null)}
+      />
     </div>
   )
 }
