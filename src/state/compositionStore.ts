@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { temporal } from 'zundo'
-import type { CompositionState, Layer, TextContent } from '../types/layer'
+import type { CompositionState, Layer, LayerBorder, TextContent } from '../types/layer'
 import type { SelectionMode } from './selection'
 import { quantize, quantizePatch } from '../canvas/quantize'
+import { normalizeBorder } from '../canvas/border'
 import { MIN_LAYER_SIZE } from '../canvas/resize'
 import { measureText, normalizeTextContent } from '../text/textMetrics'
 
@@ -62,6 +63,11 @@ export interface CompositionStore extends CompositionState {
   updateLayersTransform: (updates: LayerTransformUpdate[]) => void
   /** Set a layer's opacity, clamped to [0, 1]. */
   updateLayerOpacity: (id: string, opacity: number) => void
+  /** Set — or with `null`, remove — the border on many layers in ONE update: one
+   *  set(), one undo entry. Values pass through normalizeBorder. Unknown ids are
+   *  ignored, and a call matching nothing returns the previous state so it
+   *  records NO history entry. */
+  setLayersBorder: (ids: string[], border: LayerBorder | null) => void
   /** Rename a layer. Trims the value and maps a blank result to `null` (revert
    *  to the derived display label). No-op on an unknown id or an unchanged name.
    *  Lives in `layers`, so undo/redo works for free. */
@@ -258,6 +264,24 @@ export const useCompositionStore = create<CompositionStore>()(
       ),
       isDirty: true,
     })),
+
+  setLayersBorder: (ids, border) =>
+    set((state) => {
+      const targets = new Set(ids)
+      // normalizeBorder at the seam; null → undefined (remove the field). A
+      // removed border deletes the property, so a fresh layer reads border === undefined.
+      const next = border === null ? undefined : normalizeBorder(border)
+      let changed = false
+      const layers = state.layers.map((l) => {
+        if (!targets.has(l.id)) return l
+        changed = true
+        // Spread keeps every other field; `border: next` sets or removes it.
+        return { ...l, border: next }
+      })
+      // A call matching nothing (unknown ids / empty) records NO history entry.
+      if (!changed) return state
+      return { layers, isDirty: true }
+    }),
 
   renameLayer: (id, name) =>
     set((state) => {

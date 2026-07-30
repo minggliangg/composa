@@ -3,6 +3,7 @@ import {
   alignToCanvas,
   alignToSelection,
   distribute,
+  spaceEvenly,
 } from '../../src/canvas/align'
 import type { AlignRect } from '../../src/canvas/align'
 
@@ -127,5 +128,123 @@ describe('distribute', () => {
   it('returns [] for fewer than 2 rects', () => {
     expect(distribute([], 'horizontal')).toEqual([])
     expect(distribute([rect('a', 0, 0)], 'horizontal')).toEqual([])
+  })
+})
+
+describe('spaceEvenly', () => {
+  it('returns [] for fewer than 2 rects', () => {
+    expect(spaceEvenly([], 'horizontal', null)).toEqual([])
+    expect(spaceEvenly([rect('a', 0, 0)], 'horizontal', null)).toEqual([])
+    expect(spaceEvenly([rect('a', 0, 0)], 'horizontal', 10)).toEqual([])
+  })
+
+  it('auto: equal gaps with EQUAL sizes, outer bounds exactly preserved', () => {
+    // Already even (gaps 100), so positions are unchanged: a no-op proof that
+    // the math holds the outer bounds.
+    const items = [rect('a', 0, 0), rect('b', 200, 0), rect('c', 400, 0)]
+    const out = byId(spaceEvenly(items, 'horizontal', null))
+    expect(out).toEqual({ a: { x: 0 }, b: { x: 200 }, c: { x: 400 } })
+  })
+
+  it('auto: equal gaps with UNEQUAL sizes, outer bounds exactly preserved', () => {
+    // a w=100, b w=40, c w=100. Outer bounds 0..500. Equal gap = 130.
+    const items = [
+      rect('a', 0, 0, 100, 50),
+      rect('b', 120, 0, 40, 50),
+      rect('c', 400, 0, 100, 50),
+    ]
+    const out = byId(spaceEvenly(items, 'horizontal', null))
+    expect(out).toEqual({ a: { x: 0 }, b: { x: 230 }, c: { x: 400 } })
+    // Outer bounds preserved: first leading edge 0, last trailing edge 500.
+    expect(out.a.x).toBe(0)
+    expect(out.c.x + 100).toBe(500)
+  })
+
+  it('auto derives the gap from the MAX trailing edge, not the last-sorted rect', () => {
+    // a starts first and is wide (trailing edge 300); c is last-sorted but narrow
+    // (trailing edge 150). maxEdge must be 300 (a's), not 150 (c's).
+    const items = [
+      rect('a', 0, 0, 300, 50),
+      rect('b', 50, 0, 50, 50),
+      rect('c', 100, 0, 50, 50),
+    ]
+    const out = byId(spaceEvenly(items, 'horizontal', null))
+    expect(out.a.x).toBe(0)
+    // c's new trailing edge = x + 50 must reach 300, which only happens if
+    // maxEdge was a's 300 (using c's 150 would land at 150).
+    expect(out.c.x + 50).toBe(300)
+  })
+
+  it('auto: overlapping rects produce a negative step but keep bounds fixed', () => {
+    const items = [
+      rect('a', 0, 0, 100, 50),
+      rect('b', 10, 0, 100, 50),
+      rect('c', 20, 0, 100, 50),
+    ]
+    const out = byId(spaceEvenly(items, 'horizontal', null))
+    // Outer bounds 0..120 preserved exactly.
+    expect(out.a.x).toBe(0)
+    expect(out.c.x + 100).toBe(120)
+  })
+
+  it('auto at n=2 pins the documented meaninglessness (first held, bounds fixed)', () => {
+    const items = [rect('a', 0, 0, 100, 50), rect('b', 50, 0, 100, 50)]
+    const out = byId(spaceEvenly(items, 'horizontal', null))
+    expect(out.a.x).toBe(0)
+    expect(out.b.x + 100).toBe(150) // maxEdge = 50+100
+  })
+
+  it('fixed gap 12 places exactly 12 units between rects, first x unchanged', () => {
+    const items = [
+      rect('a', 0, 0, 100, 50),
+      rect('b', 200, 0, 50, 50),
+      rect('c', 300, 0, 80, 50),
+    ]
+    const out = byId(spaceEvenly(items, 'horizontal', 12))
+    expect(out).toEqual({ a: { x: 0 }, b: { x: 112 }, c: { x: 174 } })
+    // Gaps: 112-100=12, 174-(112+50)=12.
+    expect(out.b.x - 100).toBe(12)
+    expect(out.c.x - (out.b.x + 50)).toBe(12)
+  })
+
+  it('fixed gap 0 abuts rects edge to edge', () => {
+    const out = byId(
+      spaceEvenly([rect('a', 0, 0, 100, 50), rect('b', 200, 0, 50, 50)], 'horizontal', 0),
+    )
+    expect(out).toEqual({ a: { x: 0 }, b: { x: 100 } })
+  })
+
+  it('fixed gap -10 is applied unclamped (deliberate, negative gap)', () => {
+    const out = byId(
+      spaceEvenly([rect('a', 0, 0, 100, 50), rect('b', 200, 0, 50, 50)], 'horizontal', -10),
+    )
+    expect(out).toEqual({ a: { x: 0 }, b: { x: 90 } }) // 90 - 100 = -10
+  })
+
+  it('vertical mirrors horizontal and patches carry only y', () => {
+    const items = [
+      rect('a', 0, 0, 50, 100),
+      rect('b', 0, 200, 50, 50),
+      rect('c', 0, 300, 50, 80),
+    ]
+    const out = spaceEvenly(items, 'vertical', 12)
+    // Every patch has exactly one key: 'y' (never 'x').
+    expect(out.every((u) => Object.keys(u.patch).length === 1)).toBe(true)
+    expect(out.every((u) => Object.keys(u.patch)[0] === 'y')).toBe(true)
+    expect(byId(out)).toEqual({ a: { y: 0 }, b: { y: 112 }, c: { y: 174 } })
+  })
+
+  it('is deterministic across three input permutations', () => {
+    const a = rect('a', 0, 0, 100, 50)
+    const b = rect('b', 120, 0, 40, 50)
+    const c = rect('c', 400, 0, 100, 50)
+    const perms = [
+      [a, b, c],
+      [c, a, b],
+      [b, c, a],
+    ]
+    const results = perms.map((p) => byId(spaceEvenly(p, 'horizontal', null)))
+    expect(results[0]).toEqual(results[1])
+    expect(results[1]).toEqual(results[2])
   })
 })

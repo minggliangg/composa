@@ -8,8 +8,10 @@ import {
 import type { LayerSource } from '../../src/export/buildSvgDocument'
 import type { EmbeddedFontFace } from '../../src/export/fontEmbed'
 import { namespaceSvgMarkup } from '../../src/export/svgNamespace'
+import { assignLayerIds, borderIdKey } from '../../src/export/layerIds'
+import { borderRect } from '../../src/canvas/border'
 import { layoutText, measureText } from '../../src/text/textMetrics'
-import type { CompositionState, Layer, TextContent } from '../../src/types/layer'
+import type { CompositionState, Layer, LayerBorder, TextContent } from '../../src/types/layer'
 
 /**
  * Phase 08 export unit tests.
@@ -646,5 +648,282 @@ describe('buildSvgDocument — font embedding', () => {
     const comment = svg.slice(svg.indexOf('<!--'), svg.indexOf('-->'))
     // The comment body (between <!-- and -->) must not contain "--".
     expect(comment.includes('--', 4)).toBe(false)
+  })
+})
+
+// --- borders (Slice B) ----------------------------------------------------
+
+describe('buildSvgDocument — borders', () => {
+  function parse(svg: string) {
+    return new DOMParser().parseFromString(svg, 'image/svg+xml')
+  }
+
+  const border: LayerBorder = { color: '#cccccc', width: 2, padding: 4 }
+
+  /** A state with a blank base (no border) + one bordered overlay. */
+  function borderedState(layer: Layer): CompositionState {
+    return {
+      canvas: { width: 800, height: 600 },
+      layers: [
+        makeLayer({
+          id: 'base',
+          originalFilename: 'b.png',
+          isBaseImage: true,
+          zIndex: 0,
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 600,
+          naturalWidth: 800,
+          naturalHeight: 600,
+          fullResBytesRef: { kind: 'blank', fill: '#ffffff' },
+        }),
+        layer,
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+  }
+
+  function baseSources(overlay: LayerSource): Record<string, LayerSource> {
+    return {
+      base: { kind: 'blank', fill: '#ffffff' },
+      ovl: overlay,
+    }
+  }
+
+  it('emits exactly one border rect as the immediately-following sibling', () => {
+    const overlay = makeLayer({
+      id: 'ovl',
+      name: null,
+      originalFilename: 'o.png',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      zIndex: 1,
+      border,
+    })
+    const svg = buildSvgDocument(
+      borderedState(overlay),
+      baseSources({ kind: 'raster', dataUri: 'data:image/png;base64,ONE==' }),
+      FIXED_OPTS,
+    )
+    const doc = parse(svg)
+    const borders = Array.from(doc.querySelectorAll('rect[data-role="border"]'))
+    expect(borders).toHaveLength(1)
+    // The border is the next top-level element after the overlay's <image>.
+    const rootChildren = Array.from(doc.documentElement.children)
+    const imgIdx = rootChildren.findIndex((e) => e.tagName === 'image')
+    expect(imgIdx).toBeGreaterThan(-1)
+    expect(rootChildren[imgIdx + 1]).toBe(borders[0])
+  })
+
+  it('emitted border geometry equals borderRect(layer) field-for-field (anti-drift)', () => {
+    const overlay = makeLayer({
+      id: 'ovl',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      zIndex: 1,
+      border,
+    })
+    const r = borderRect(overlay)!
+    const svg = buildSvgDocument(
+      borderedState(overlay),
+      baseSources({ kind: 'raster', dataUri: 'data:image/png;base64,ONE==' }),
+      FIXED_OPTS,
+    )
+    const b = parse(svg).querySelector('rect[data-role="border"]')!
+    expect(b.getAttribute('x')).toBe(String(r.x))
+    expect(b.getAttribute('y')).toBe(String(r.y))
+    expect(b.getAttribute('width')).toBe(String(r.width))
+    expect(b.getAttribute('height')).toBe(String(r.height))
+    expect(b.getAttribute('stroke-width')).toBe(String(r.strokeWidth))
+  })
+
+  it('carries hyphenated stroke-width + fill="none" and NO vector-effect', () => {
+    const overlay = makeLayer({
+      id: 'ovl',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      zIndex: 1,
+      border,
+    })
+    const svg = buildSvgDocument(
+      borderedState(overlay),
+      baseSources({ kind: 'raster', dataUri: 'data:image/png;base64,ONE==' }),
+      FIXED_OPTS,
+    )
+    const b = parse(svg).querySelector('rect[data-role="border"]')!
+    expect(b.getAttribute('stroke-width')).toBe('2')
+    expect(b.getAttribute('fill')).toBe('none')
+    expect(b.getAttribute('vector-effect')).toBeNull()
+    expect(svg).not.toContain('vector-effect')
+  })
+
+  it("the border id is the layer's element id + '-border'", () => {
+    const overlay = makeLayer({
+      id: 'ovl',
+      name: 'hero',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      zIndex: 1,
+      border,
+    })
+    const doc = parse(
+      buildSvgDocument(
+        borderedState(overlay),
+        baseSources({ kind: 'raster', dataUri: 'data:image/png;base64,ONE==' }),
+        FIXED_OPTS,
+      ),
+    )
+    const img = doc.querySelector('image')!
+    const b = doc.querySelector('rect[data-role="border"]')!
+    expect(b.getAttribute('id')).toBe(img.getAttribute('id') + '-border')
+  })
+
+  it("the border opacity mirrors the layer's opacity", () => {
+    const overlay = makeLayer({
+      id: 'ovl',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      zIndex: 1,
+      opacity: 0.5,
+      border,
+    })
+    const b = parse(
+      buildSvgDocument(
+        borderedState(overlay),
+        baseSources({ kind: 'raster', dataUri: 'data:image/png;base64,ONE==' }),
+        FIXED_OPTS,
+      ),
+    ).querySelector('rect[data-role="border"]')!
+    expect(b.getAttribute('opacity')).toBe('0.5')
+  })
+
+  it('emits exactly one border rect for EVERY layer source kind (forgotten-arm guard)', () => {
+    const tc: TextContent = {
+      content: 'Hi',
+      fontSize: 10,
+      fontWeight: 400,
+      italic: false,
+      fill: '#000000',
+      align: 'left',
+    }
+    const m = measureText(tc.content, tc.fontSize)
+    const cases: { name: string; layer: Layer; source: LayerSource }[] = [
+      {
+        name: 'raster',
+        layer: makeLayer({ id: 'ovl', x: 100, y: 100, width: 200, height: 150, zIndex: 1, border }),
+        source: { kind: 'raster', dataUri: 'data:1' },
+      },
+      {
+        name: 'blank',
+        layer: makeLayer({ id: 'ovl', x: 100, y: 100, width: 200, height: 150, zIndex: 1, border }),
+        source: { kind: 'blank', fill: '#ffffff' },
+      },
+      {
+        name: 'rect',
+        layer: makeLayer({ id: 'ovl', x: 100, y: 100, width: 200, height: 150, zIndex: 1, fullResBytesRef: { kind: 'rect', fill: null }, border }),
+        source: { kind: 'rect', fill: null },
+      },
+      {
+        name: 'text',
+        layer: makeLayer({ id: 'ovl', x: 100, y: 100, width: m.width, height: m.height, naturalWidth: m.width, naturalHeight: m.height, zIndex: 1, mimeType: 'text/plain', fullResBytesRef: { kind: 'text', text: tc }, border }),
+        source: { kind: 'text', text: tc },
+      },
+      {
+        name: 'svg',
+        layer: makeLayer({ id: 'ovl', x: 100, y: 100, width: 200, height: 150, zIndex: 1, mimeType: 'image/svg+xml', fullResBytesRef: { kind: 'svg', markup: '<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>', viewBox: '0 0 10 10' }, border }),
+        source: { kind: 'svg', inner: '<rect width="10" height="10"/>', viewBox: '0 0 10 10' },
+      },
+    ]
+    for (const c of cases) {
+      const doc = parse(buildSvgDocument(borderedState(c.layer), baseSources(c.source), FIXED_OPTS))
+      const borders = Array.from(doc.querySelectorAll('rect[data-role="border"]'))
+      expect(borders, c.name).toHaveLength(1)
+    }
+  })
+
+  it('a bordered text layer still has 0 rects in its nested <svg>', () => {
+    const tc: TextContent = {
+      content: 'Hi',
+      fontSize: 10,
+      fontWeight: 400,
+      italic: false,
+      fill: '#000000',
+      align: 'left',
+    }
+    const m = measureText(tc.content, tc.fontSize)
+    const overlay = makeLayer({
+      id: 'ovl',
+      x: 100,
+      y: 100,
+      width: m.width,
+      height: m.height,
+      naturalWidth: m.width,
+      naturalHeight: m.height,
+      zIndex: 1,
+      mimeType: 'text/plain',
+      fullResBytesRef: { kind: 'text', text: tc },
+      border,
+    })
+    const doc = parse(
+      buildSvgDocument(borderedState(overlay), baseSources({ kind: 'text', text: tc }), FIXED_OPTS),
+    )
+    const nested = doc.querySelector('svg > svg')!
+    expect(nested.querySelectorAll('rect')).toHaveLength(0)
+  })
+
+  it('a blank base with a border still yields the base from querySelector(rect)', () => {
+    // The base never gets a border in the UI, but this guards the emission
+    // ORDER: the border is emitted AFTER the base's own rect, so the base stays
+    // the first <rect> (e.g. for blank-canvas templates).
+    const state: CompositionState = {
+      canvas: { width: 100, height: 100 },
+      layers: [
+        makeLayer({
+          id: 'base',
+          originalFilename: 'blank.svg',
+          isBaseImage: true,
+          zIndex: 0,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          naturalWidth: 100,
+          naturalHeight: 100,
+          fullResBytesRef: { kind: 'blank', fill: '#ffffff' },
+          border,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+    const doc = parse(
+      buildSvgDocument(state, { base: { kind: 'blank', fill: '#ffffff' } }, FIXED_OPTS),
+    )
+    const firstRect = doc.querySelector('rect')
+    expect(firstRect).not.toBeNull()
+    expect(firstRect!.getAttribute('data-role')).toBe('base')
+    expect(firstRect!.getAttribute('fill')).toBe('#ffffff')
+  })
+
+  it('assignLayerIds reserves a border id unconditionally (identical with/without border)', () => {
+    const ids = assignLayerIds([makeLayer({ id: 'a', name: 'hero', zIndex: 1 })])
+    const idsBordered = assignLayerIds([
+      makeLayer({ id: 'a', name: 'hero', zIndex: 1, border }),
+    ])
+    expect(ids.get('a')).toBe(idsBordered.get('a'))
+    expect(ids.get(borderIdKey('a'))).toBe(idsBordered.get(borderIdKey('a')))
+    expect(ids.get(borderIdKey('a'))).toBe('hero-border')
   })
 })

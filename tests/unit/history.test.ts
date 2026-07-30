@@ -399,3 +399,58 @@ describe('history — limit & reset', () => {
     expect(store().layers).toHaveLength(0)
   })
 })
+
+describe('history — setLayersBorder', () => {
+  function layer(id: string) {
+    return useCompositionStore.getState().layers.find((l) => l.id === id)!
+  }
+
+  it('one setLayersBorder on 3 layers records a single past state; undo reverts all', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const a = makeOverlayLayer('a.png')
+    const b = makeOverlayLayer('b.png')
+    const c = makeOverlayLayer('c.png')
+    store().addOverlay(a)
+    store().addOverlay(b)
+    store().addOverlay(c)
+    useCompositionStore.temporal.getState().clear()
+
+    store().setLayersBorder([a.id, b.id, c.id], {
+      color: '#cccccc',
+      width: 1,
+      padding: 0,
+    })
+    expect(temporal().pastStates).toHaveLength(1)
+
+    undo()
+    expect(layer(a.id).border).toBeUndefined()
+    expect(layer(b.id).border).toBeUndefined()
+    expect(layer(c.id).border).toBeUndefined()
+  })
+
+  it('a no-op call (matching nothing) records no history entry', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    useCompositionStore.temporal.getState().clear()
+    store().setLayersBorder([], { color: '#cccccc', width: 1, padding: 0 })
+    expect(temporal().pastStates).toHaveLength(0)
+  })
+
+  it('add -> width -> padding walks back one step at a time', () => {
+    store().setBaseImage(makeBaseLayer(800, 600))
+    const a = makeOverlayLayer('a.png')
+    store().addOverlay(a)
+    useCompositionStore.temporal.getState().clear()
+
+    store().setLayersBorder([a.id], { color: '#cccccc', width: 1, padding: 0 })
+    store().setLayersBorder([a.id], { color: '#cccccc', width: 4, padding: 0 })
+    store().setLayersBorder([a.id], { color: '#cccccc', width: 4, padding: 6 })
+    expect(temporal().pastStates).toHaveLength(3)
+
+    undo() // back to width=4, padding=0
+    expect(layer(a.id).border).toEqual({ color: '#cccccc', width: 4, padding: 0 })
+    undo() // back to width=1, padding=0
+    expect(layer(a.id).border).toEqual({ color: '#cccccc', width: 1, padding: 0 })
+    undo() // back to no border
+    expect(layer(a.id).border).toBeUndefined()
+  })
+})

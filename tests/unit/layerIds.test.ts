@@ -3,6 +3,7 @@ import {
   sanitizeSvgId,
   assignLayerIds,
   idSourceLabel,
+  borderIdKey,
 } from '../../src/export/layerIds'
 import type { Layer } from '../../src/types/layer'
 import { createLayerId } from '../../src/types/layer'
@@ -146,5 +147,44 @@ describe('assignLayerIds', () => {
     expect([...assignLayerIds(input).values()]).toEqual([
       ...assignLayerIds(input).values(),
     ])
+  })
+})
+
+describe('assignLayerIds — border ids', () => {
+  it('claims a border id for every layer, unique across both key kinds', () => {
+    const ids = assignLayerIds([
+      layer({ id: 'a', name: 'alpha', zIndex: 1 }),
+      layer({ id: 'b', name: 'beta', zIndex: 2 }),
+    ])
+    expect(ids.get(borderIdKey('a'))).toBe('alpha-border')
+    expect(ids.get(borderIdKey('b'))).toBe('beta-border')
+    const values = [...ids.values()]
+    expect(new Set(values).size).toBe(values.length) // all unique
+  })
+
+  it('the collision case: layers named "foo" and "foo-border" get four distinct ids', () => {
+    // A bare (un-claimed) border id would let b's own sanitized id 'foo-border'
+    // collide with a's border id — claim() dedupes both.
+    const ids = assignLayerIds([
+      layer({ id: 'a', name: 'foo', zIndex: 1 }),
+      layer({ id: 'b', name: 'foo-border', zIndex: 2 }),
+    ])
+    expect(ids.get('a')).toBe('foo')
+    expect(ids.get(borderIdKey('a'))).toBe('foo-border')
+    // b's sanitized id 'foo-border' is already claimed by a's border -> deduped.
+    expect(ids.get('b')).toBe('foo-border-2')
+    expect(ids.get(borderIdKey('b'))).toBe('foo-border-2-border')
+    const values = [...ids.values()]
+    expect(new Set(values).size).toBe(values.length)
+  })
+
+  it('is stable across calls', () => {
+    const input = [
+      layer({ id: 'a', name: 'foo', zIndex: 1 }),
+      layer({ id: 'b', name: 'foo-border', zIndex: 2 }),
+    ]
+    expect([...assignLayerIds(input).entries()]).toEqual(
+      [...assignLayerIds(input).entries()],
+    )
   })
 })

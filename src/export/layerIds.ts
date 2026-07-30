@@ -58,6 +58,12 @@ export function sanitizeSvgId(raw: string): string {
  * a leading `_` so a user-chosen name can never collide with a namespaced
  * inner-SVG identifier. An empty sanitized id falls back to `layer-<index>`.
  */
+/** Key under which a layer's BORDER rect id is stored in the map. Collision-proof:
+ *  `layer.id` is a UUID, so it can never contain `#`. */
+export function borderIdKey(layerId: string): string {
+  return `${layerId}#border`
+}
+
 export function assignLayerIds(layers: Layer[]): Map<string, string> {
   const sorted = [...layers].sort((a, b) => a.zIndex - b.zIndex)
   const used = new Set<string>()
@@ -81,7 +87,14 @@ export function assignLayerIds(layers: Layer[]): Map<string, string> {
     // Escape the nested-SVG namespace prefix pattern so a user name can't
     // masquerade as a namespaced inner id (e.g. `L1__g1`).
     if (/^L\d+__/.test(id)) id = `_${id}`
-    out.set(layer.id, claim(id))
+    const claimed = claim(id)
+    out.set(layer.id, claimed)
+    // Claim a BORDER id for EVERY layer, bordered or not, so toggling a border
+    // never renumbers another element. Must go through claim(), NOT a bare
+    // used.add(): a user can name a layer literally `foo-border`, and with a
+    // bare add that layer and a bordered layer named `foo` would both own
+    // `foo-border`.
+    out.set(borderIdKey(layer.id), claim(`${claimed}-border`))
   })
   return out
 }
