@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useCompositionStore } from '../../src/state/compositionStore'
 import { exportComposition } from '../../src/export/exportComposition'
+import { exportWebp } from '../../src/export/exportWebp'
 
 /**
  * Phase 09 export-guard tests.
  *
- * `exportComposition` must refuse to produce a file when there is no base image
- * (plan §6 step 1: "no base image -> Export disabled"). This file asserts the
+ * `exportComposition` (and, since the WebP feature, `exportWebp`) must refuse
+ * to produce a file when there is no base image (plan §6 step 1: "no base
+ * image -> Export disabled"). This file asserts the
  * `{ ok: false, reason: 'no_base' }` path and that NO download is triggered.
  *
  * `downloadFile` is mocked so we can assert it is never called on this path
@@ -63,6 +65,47 @@ describe('exportComposition — no-base guard', () => {
     })
 
     const result = await exportComposition()
+    expect(result).toEqual({ ok: false, reason: 'no_base' })
+    expect(downloadFile).not.toHaveBeenCalled()
+  })
+})
+
+describe('exportWebp — no-base guard', () => {
+  it('returns { ok: false, reason: "no_base" } when the composition is empty', async () => {
+    const result = await exportWebp()
+    expect(result).toEqual({ ok: false, reason: 'no_base' })
+    // NEVER a partial pair: no image download, no manifest download.
+    expect(downloadFile).not.toHaveBeenCalled()
+  })
+
+  it('returns { ok: false, reason: "no_base" } even with overlays but no base', async () => {
+    useCompositionStore.setState({
+      layers: [
+        {
+          id: 'lonely-overlay',
+          originalFilename: 'o.png',
+          name: null,
+          mimeType: 'image/png',
+          previewUrl: 'blob:o',
+          fullResBytesRef: { kind: 'file', file: new File([], 'o.png') },
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+          naturalWidth: 10,
+          naturalHeight: 10,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          visible: true,
+          locked: false,
+          isBaseImage: false,
+        },
+      ],
+      canvas: null,
+    })
+
+    const result = await exportWebp()
     expect(result).toEqual({ ok: false, reason: 'no_base' })
     expect(downloadFile).not.toHaveBeenCalled()
   })

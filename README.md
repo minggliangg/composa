@@ -1,6 +1,6 @@
 # composa.
 
-**An image composition board for the browser.** Upload a base image, layer movable / resizable overlays on top of it, and export the whole arrangement as a single self-contained SVG — images base64-embedded, filenames, positions, dimensions and layer order all preserved exactly.
+**An image composition board for the browser.** Upload a base image (or start from a blank canvas — solid white or fully transparent), layer movable / resizable overlays on top of it, and export the whole arrangement as a single self-contained SVG — images base64-embedded, filenames, positions, dimensions and layer order all preserved exactly. Prefer a flattened raster? Export a **WebP image plus a JSON manifest** of every layer's coordinates and sizes.
 
 🔗 **Live demo:** <https://mingliangg.com/composa/>
 
@@ -8,7 +8,7 @@
 
 ## Highlights
 
-- **Layered composition** — one base image defines the canvas; add as many overlays as you like.
+- **Layered composition** — one base image defines the canvas; add as many overlays as you like. No image at hand? Start from a blank canvas in four 1:1 sizes — white or **transparent** (toggle the background any time from the properties panel; exports keep their alpha).
 - **Direct manipulation** — click to select, drag to move, 8 resize handles (corners preserve aspect ratio, edges resize one axis). Works in real SVG coordinate space, so it stays correct under any letterboxing.
 - **Off-canvas friendly** — drag layers beyond the canvas edge (Figma/Photoshop style); a dashed boundary shows the export crop, and standard SVG viewport clipping handles the rest at export.
 - **Text layers** — add live, editable text in Atkinson Hyperlegible Mono; control size, weight, italic, fill, and alignment. The font is embedded (base64 `@font-face`) right inside the exported SVG, so text renders identically reopened in any browser.
@@ -16,6 +16,7 @@
 - **Alignment guides** — hold **Alt/Option** while dragging to snap a layer's edges/centre to other layers or the canvas, with live guide lines. (A status-bar toggle inverts the default for window managers that grab Alt.)
 - **WASM image pipeline** — a Rust/WebAssembly module (running in a Web Worker, off the UI thread) decodes uploads, builds downscaled previews for smooth editing, and re-encodes the full-resolution original at export. Large images never block the UI, and quality is never lost on export.
 - **Faithful SVG export** — one file, no external assets. Transparent PNGs keep their alpha, filenames with special characters are XML-escaped, and the output opens identically in any browser.
+- **WebP + manifest export** — flatten the composition to a single WebP image (alpha preserved; PNG fallback on browsers that can't encode WebP) alongside a JSON manifest listing every layer's position, size, opacity, z-order, and name — canvas units map 1:1 to image pixels. (If the browser gates the second automatic download, a one-click *Download manifest* button completes the pair.)
 - **No backend, no tracking** — a static SPA. (There's also no persistence in this MVP: refresh loses your work, so use Export to save.)
 
 ## How it works
@@ -57,7 +58,8 @@ composa/
 │   │                           #   ResizeHandle, coords (CTM math), useCanvasPointer, resize (pure math)
 │   ├── state/                  # Zustand composition store (single source of truth)
 │   ├── panels/                 # TopBar, LeftPanel (upload + layer list), RightPanel (properties)
-│   ├── export/                 # buildSvgDocument, exportComposition, xmlEscape, downloadFile,
+│   ├── export/                 # buildSvgDocument, exportComposition, exportWebp (+ rasterize,
+│   │                           #   layerManifest, resolveSources), xmlEscape, downloadFile,
 │   │                           #   layerIds (exported id sanitising), fontEmbed (embedded @font-face)
 │   ├── text/                   # textMetrics (pure monospace metrics + layout, shared by canvas + export)
 │   ├── upload/                 # fileValidation, filenameDisplay (dedup + display labels), errorMessages
@@ -99,7 +101,7 @@ The trickiest logic (coordinate conversion, drag deltas, all 8 resize handles wi
 
 ## Notes & non-goals (MVP)
 
-- **No persistence** — refreshing the page loses your work. An `isDirty` banner and a native `beforeunload` guard warn you; use **Export** to save an SVG.
+- **No persistence** — refreshing the page loses your work. An `isDirty` banner and a native `beforeunload` guard warn you; use **Export** to save an SVG (or **WebP** for a raster + JSON pair).
 - **Rotation, lock/visibility toggles, cropping, undo/redo, multi-select** are intentionally out of scope (the data model leaves room for some of them).
 - **Animated GIFs** are treated as first-frame-only.
 - Export always **stretches** layers to their recorded box (`preserveAspectRatio="none"`); the model leaves room for a future crop rect.

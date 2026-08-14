@@ -6,6 +6,7 @@ import { quantize, quantizePatch } from '../canvas/quantize'
 import { normalizeBorder } from '../canvas/border'
 import { MIN_LAYER_SIZE } from '../canvas/resize'
 import { measureText, normalizeTextContent } from '../text/textMetrics'
+import { blankBasePreviewUrl } from '../composition/blankBase'
 
 /**
  * Zustand composition store — the single source of truth every UI surface reads
@@ -72,6 +73,12 @@ export interface CompositionStore extends CompositionState {
    *  to the derived display label). No-op on an unknown id or an unchanged name.
    *  Lives in `layers`, so undo/redo works for free. */
   renameLayer: (id: string, name: string) => void
+  /** Set a BLANK base's background: `fill` is a colour, or `null` for a fully
+   *  transparent base. No-op when there is no base, the base is not a blank
+   *  template (uploaded images own their pixels), or the fill is unchanged.
+   *  Rebuilds the preview data URI from the same helper that built it, so the
+   *  canvas and export can never drift. Lives in `layers` — undoable for free. */
+  setBaseBackground: (fill: string | null) => void
   /** Patch a text layer's content/style. Recomputes natural dims from the merged
    *  payload and preserves the caller-supplied `scale` (captured once when the
    *  edit gesture starts), anchoring top-left. A SINGLE set() — `quantizePatch`
@@ -293,6 +300,25 @@ export const useCompositionStore = create<CompositionStore>()(
       if (target.name === next) return state
       const layers = state.layers.slice()
       layers[idx] = { ...target, name: next }
+      return { layers, isDirty: true }
+    }),
+
+  setBaseBackground: (fill) =>
+    set((state) => {
+      const base = state.layers.find((l) => l.isBaseImage)
+      // Only a blank template's background is editable: an uploaded base owns
+      // its pixels, and non-base blanks don't exist (blank == base-only kind).
+      if (!base || base.fullResBytesRef.kind !== 'blank') return state
+      if (base.fullResBytesRef.fill === fill) return state
+      const layers = state.layers.map((l) =>
+        l.id === base.id
+          ? {
+              ...l,
+              previewUrl: blankBasePreviewUrl(l.naturalWidth, fill),
+              fullResBytesRef: { kind: 'blank' as const, fill },
+            }
+          : l,
+      )
       return { layers, isDirty: true }
     }),
 

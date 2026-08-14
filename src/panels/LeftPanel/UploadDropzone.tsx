@@ -187,6 +187,10 @@ export function UploadDropzone() {
 
   const [errors, setErrors] = useState<UploadError[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  // The fill a blank-canvas button will create: white (default) or fully
+  // transparent. Applies at creation; an existing blank base can switch later
+  // in the properties panel (setBaseBackground).
+  const [blankFill, setBlankFill] = useState<string | null>('#ffffff')
   // Pending blank-size selection awaiting confirmation (only set when replacing
   // an existing base — a fresh canvas needs no confirmation).
   const [blankReplace, setBlankReplace] = useState<number | null>(null)
@@ -219,13 +223,13 @@ export function UploadDropzone() {
     if (hasBase) {
       setBlankReplace(size)
     } else {
-      setBaseImage(createBlankBaseLayer(size))
+      setBaseImage(createBlankBaseLayer(size, blankFill))
     }
   }
 
   const confirmBlankReplace = (): void => {
     if (blankReplace == null) return
-    setBaseImage(createBlankBaseLayer(blankReplace))
+    setBaseImage(createBlankBaseLayer(blankReplace, blankFill))
     setBlankReplace(null)
   }
 
@@ -402,6 +406,43 @@ export function UploadDropzone() {
         <span className="text-xs text-fg-muted">
           or start from a blank canvas
         </span>
+        {/* Fill choice for the blank templates: a solid white board, or a
+            fully transparent base (exports keep their alpha — the point of
+            the transparent variant). Segmented two-option control. */}
+        <div
+          className="grid grid-cols-2 gap-1.5"
+          role="group"
+          aria-label="Blank canvas fill"
+        >
+          <button
+            type="button"
+            onClick={() => setBlankFill('#ffffff')}
+            aria-pressed={blankFill === '#ffffff'}
+            className={
+              'rounded-md border px-1 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-fg-muted/40 ' +
+              (blankFill === '#ffffff'
+                ? 'border-fg-muted bg-raised-hover text-fg'
+                : 'border-border bg-raised text-fg-muted hover:border-fg-muted hover:text-fg')
+            }
+            data-testid="blank-fill-white"
+          >
+            White
+          </button>
+          <button
+            type="button"
+            onClick={() => setBlankFill(null)}
+            aria-pressed={blankFill === null}
+            className={
+              'rounded-md border px-1 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-fg-muted/40 ' +
+              (blankFill === null
+                ? 'border-fg-muted bg-raised-hover text-fg'
+                : 'border-border bg-raised text-fg-muted hover:border-fg-muted hover:text-fg')
+            }
+            data-testid="blank-fill-transparent"
+          >
+            Transparent
+          </button>
+        </div>
         <div className="grid grid-cols-4 gap-1.5">
           {BLANK_BASE_SIZES.map((size) => (
             <button
@@ -495,7 +536,7 @@ export function UploadDropzone() {
       <ConfirmDialog
         open={blankReplace !== null}
         title="Replace the base?"
-        message={`Start a new ${blankReplace ?? ''}×${blankReplace ?? ''} blank canvas? Existing overlays are kept, but the current base will be replaced.`}
+        message={`Start a new ${blankReplace ?? ''}×${blankReplace ?? ''} ${blankFill === null ? 'transparent' : 'white'} blank canvas? Existing overlays are kept, but the current base will be replaced.`}
         confirmLabel="Replace"
         cancelLabel="Cancel"
         destructive

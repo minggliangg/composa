@@ -38,7 +38,9 @@ export interface BuildOptions {
  * resolve synchronously upstream in `exportComposition` (no WASM); the builder
  * just emits them.
  *   - `raster`: today's embedded `<image>`.
- *   - `blank`: a solid `<rect>` (a blank-base template).
+ *   - `blank`: a solid `<rect>` (a blank-base template); `fill: null` is a
+ *     TRANSPARENT base, emitted as `fill="none"` so rasterized exports keep
+ *     their alpha.
  *   - `svg`: a nested `<svg>` body (`inner`, already id/class-namespaced) + its
  *     source `viewBox`, preserving vector fidelity.
  *   - `text`: a nested `<svg>` + `<text>`/`<tspan>` laid out from the SAME pure
@@ -47,7 +49,7 @@ export interface BuildOptions {
 export type LayerSource =
   | { kind: 'raster'; dataUri: string }
   | { kind: 'svg'; inner: string; viewBox: string }
-  | { kind: 'blank'; fill: string }
+  | { kind: 'blank'; fill: string | null }
   | { kind: 'text'; text: TextContent }
   | { kind: 'rect'; fill: string | null }
 
@@ -174,13 +176,16 @@ export function buildSvgDocument(
     }
 
     if (source.kind === 'blank') {
-      // A blank base: a literal solid rect (rasterizes correctly everywhere).
+      // A blank base: a literal rect (rasterizes correctly everywhere). A
+      // transparent base (`fill: null`) keeps the rect — with `fill="none"` —
+      // so the element/id/data-name structure is identical to a filled base;
+      // only the paint differs, and rasterized exports keep their alpha.
       return (
         `  <rect x="${layer.x}"` +
         ` y="${layer.y}"` +
         ` width="${layer.width}"` +
         ` height="${layer.height}"` +
-        ` fill="${source.fill}"` +
+        ` fill="${source.fill ?? 'none'}"` +
         ` opacity="${layer.opacity}"` +
         `${idAttr}` +
         `${filenameAttr}` +

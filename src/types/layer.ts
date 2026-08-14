@@ -15,7 +15,9 @@
  *   - `svg`: sanitized SVG markup (root guaranteed to carry a `viewBox`),
  *     embedded as a nested `<svg>` so vector fidelity survives the round trip.
  *   - `blank`: a solid fill (e.g. `#ffffff`) for a blank-base template,
- *     exported as a literal `<rect>` rather than an embedded image.
+ *     exported as a literal `<rect>` rather than an embedded image. `fill`
+ *     `null` = a TRANSPARENT blank base: the rect is emitted with
+ *     `fill="none"`, so exports (SVG and rasterized WebP) keep their alpha.
  *   - `text`: a styled text layer (Atkinson Hyperlegible Mono), rendered live on
  *     the canvas and embedded — font and all — in the export. (The `text` arm is
  *     added to this union in Step 6 alongside its store action.)
@@ -27,7 +29,7 @@ export type FullResBytesRef =
   | { kind: 'file'; file: File }
   | { kind: 'reencoded'; dataUri: string }
   | { kind: 'svg'; markup: string; viewBox: string }
-  | { kind: 'blank'; fill: string }
+  | { kind: 'blank'; fill: string | null }
   | { kind: 'text'; text: TextContent }
   | { kind: 'rect'; fill: string | null }
 
