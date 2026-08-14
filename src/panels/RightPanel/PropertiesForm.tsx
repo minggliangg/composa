@@ -83,6 +83,7 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
   const resetLayersToOriginalSize = useCompositionStore(
     (s) => s.resetLayersToOriginalSize,
   )
+  const setBaseBackground = useCompositionStore((s) => s.setBaseBackground)
 
   // Local string drafts for the four inputs.
   const [drafts, setDrafts] = useState<Record<Field, string>>({
@@ -268,6 +269,53 @@ function LayerPropertiesForm({ layer, selectedCount }: LayerPropertiesFormProps)
       </fieldset>
 
       {layer.fullResBytesRef.kind === 'text' && <TextControls layer={layer} />}
+
+      {/* Blank-base-only: switch the synthetic base between a solid white
+          board and a fully transparent one (alpha survives export). Guarded on
+          BOTH conditions — blank (an uploaded base owns its pixels) AND base
+          (blank is a base-only kind, but the guard keeps it honest if that
+          ever changes, mirroring the BorderControls base guard below). */}
+      {layer.isBaseImage && layer.fullResBytesRef.kind === 'blank' && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-muted">
+            Background
+          </legend>
+          <div
+            className="grid grid-cols-2 gap-1.5"
+            role="group"
+            aria-label="Base background"
+          >
+            <button
+              type="button"
+              onClick={() => setBaseBackground('#ffffff')}
+              aria-pressed={layer.fullResBytesRef.fill !== null}
+              className={
+                'rounded-md border px-2 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-fg-muted/40 ' +
+                (layer.fullResBytesRef.fill !== null
+                  ? 'border-fg-muted bg-raised-hover text-fg'
+                  : 'border-border bg-raised text-fg-muted hover:border-fg-muted hover:text-fg')
+              }
+              data-testid="base-fill-white"
+            >
+              White
+            </button>
+            <button
+              type="button"
+              onClick={() => setBaseBackground(null)}
+              aria-pressed={layer.fullResBytesRef.fill === null}
+              className={
+                'rounded-md border px-2 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-fg-muted/40 ' +
+                (layer.fullResBytesRef.fill === null
+                  ? 'border-fg-muted bg-raised-hover text-fg'
+                  : 'border-border bg-raised text-fg-muted hover:border-fg-muted hover:text-fg')
+              }
+              data-testid="base-fill-transparent"
+            >
+              Transparent
+            </button>
+          </div>
+        </fieldset>
+      )}
 
       {/* Borders are per-OVERLAY. The base fills the canvas exactly, so an
           OUTWARD border on it would land entirely outside the exported viewBox

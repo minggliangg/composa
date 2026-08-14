@@ -233,6 +233,22 @@ export function CompositionCanvas() {
   // Array order directly maps to SVG paint order after sorting by z-index.
   const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex)
 
+  // A TRANSPARENT blank base swaps the solid white backdrop for a checkerboard
+  // so transparency reads as transparency (the standard editor affordance).
+  // Editor-only chrome — `buildSvgDocument` builds from state and never emits
+  // it. Checker squares are proportional to the canvas (≈32 across, clamped)
+  // so they stay visible on both 512 and 4096 bases.
+  const baseLayer = layers.find((l) => l.isBaseImage)
+  const transparentBase =
+    baseLayer !== undefined &&
+    baseLayer.fullResBytesRef.kind === 'blank' &&
+    baseLayer.fullResBytesRef.fill === null
+  const checkerSize = Math.max(8, Math.min(32, canvas.width / 32))
+  // Both backdrop variants keep the same pointerdown clearing behavior.
+  const onBackdropPointerDown = (e: PointerEvent<SVGRectElement>) => {
+    if (e.button === 0 && !spaceHeldRef.current) clearSelection()
+  }
+
   return (
     <section
       ref={sectionRef}
@@ -269,18 +285,44 @@ export function CompositionCanvas() {
         }}
       >
         {/* Background sits behind every layer so transparent areas read as
-            white. It also receives pointerdown on empty canvas area (the base
-            image lets clicks pass through it) to clear the selection — but not
-            while panning (middle button / Space held). */}
+            white — or, for a transparent blank base, as a checkerboard. It
+            also receives pointerdown on empty canvas area (the base image lets
+            clicks pass through it) to clear the selection — but not while
+            panning (middle button / Space held). */}
+        {transparentBase && (
+          <defs>
+            <pattern
+              id="composa-checker"
+              width={checkerSize}
+              height={checkerSize}
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width={checkerSize} height={checkerSize} fill="#ffffff" />
+              <rect
+                width={checkerSize / 2}
+                height={checkerSize / 2}
+                fill="#e4e4e4"
+              />
+              <rect
+                x={checkerSize / 2}
+                y={checkerSize / 2}
+                width={checkerSize / 2}
+                height={checkerSize / 2}
+                fill="#e4e4e4"
+              />
+            </pattern>
+          </defs>
+        )}
         <rect
           x={0}
           y={0}
           width={canvas.width}
           height={canvas.height}
-          className="fill-white"
-          onPointerDown={(e) => {
-            if (e.button === 0 && !spaceHeldRef.current) clearSelection()
-          }}
+          className={transparentBase ? undefined : 'fill-white'}
+          fill={transparentBase ? 'url(#composa-checker)' : undefined}
+          onPointerDown={onBackdropPointerDown}
+          data-testid="canvas-backdrop"
+          data-transparent={transparentBase ? 'true' : undefined}
         />
         {sortedLayers.map((layer) => (
           <LayerImage key={layer.id} layer={layer} svgRef={svgRef} />

@@ -34,6 +34,8 @@ import { useCompositionStore } from '../state/compositionStore'
 import { useTemporalStore, undo, redo } from '../state/useTemporalStore'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { exportComposition } from '../export/exportComposition'
+import { exportWebp } from '../export/exportWebp'
+import { downloadFile } from '../export/downloadFile'
 import { wasmErrorMessage } from '../upload/errorMessages'
 import { toggleTheme, useTheme } from '../state/theme'
 import { useUiState } from '../state/uiState'
@@ -52,8 +54,17 @@ export function TopBar() {
   const canRedo = useTemporalStore((s) => s.futureStates.length > 0)
 
   const [resetOpen, setResetOpen] = useState(false)
+  // One in-flight flag guards BOTH export buttons: a second export while one
+  // is running would double-download (and double-mark-clean).
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  // Neutral (non-error) export note — e.g. the WebP→PNG fallback notice.
+  const [exportNote, setExportNote] = useState<string | null>(null)
+  // The manifest blob awaiting an explicit download click. Browsers gate a
+  // second automatic download behind a prompt once the export click's
+  // transient activation expires; a follow-up CLICK is always gesture-backed
+  // and never gated. Null = nothing pending (downloaded directly, or none).
+  const [pendingManifest, setPendingManifest] = useState<Blob | null>(null)
 
   const hasBase = layers.some((l) => l.isBaseImage)
   const hasLayers = layers.length > 0
@@ -106,6 +117,8 @@ export function TopBar() {
 
   const handleExport = async () => {
     setExportError(null)
+    setExportNote(null)
+    setPendingManifest(null)
     setExporting(true)
     try {
       const result = await exportComposition()
@@ -128,6 +141,58 @@ export function TopBar() {
       }
     } catch {
       setExportError('Could not export the composition.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // WebP export: flattens the composition to one raster image (WebP where the
+  // browser can encode it — PNG fallback on e.g. older Safari) plus a sibling
+  // JSON manifest of every layer's coordinates and sizes. Any successful
+  // export — SVG or raster — is the "save" moment.
+  const handleExportWebp = async () => {
+    setExportError(null)
+    setExportNote(null)
+    setPendingManifest(null)
+    setExporting(true)
+    try {
+      const result = await exportWebp()
+      if (!result.ok) {
+        if (result.reason === 'reencode_failed' && result.code) {
+          setExportError(wasmErrorMessage(result.code))
+        } else if (
+          result.reason === 'raster_failed' &&
+          (result.code === 'canvas_too_large' || result.code === 'canvas_blank')
+        ) {
+          setExportError(
+            'The composition is too large for this browser to rasterize — try the SVG export instead.',
+          )
+        } else if (result.reason === 'no_base') {
+          setExportError('Add a base image before exporting.')
+        } else {
+          setExportError('Could not rasterize the composition.')
+        }
+      } else {
+        if (result.format === 'image/png') {
+          setExportNote(
+            'This browser cannot encode WebP — exported PNG + manifest instead.',
+          )
+        }
+        if (result.manifestDownloaded) {
+          setPendingManifest(null)
+        } else {
+          // The second automatic download would hit the browser's
+          // multiple-downloads gate; hold the blob for an explicit click.
+          setPendingManifest(result.manifestBlob)
+          setExportNote(
+            'One more click downloads the manifest — browsers can block a second automatic download.',
+          )
+        }
+        markClean()
+        markSaved()
+      }
+    } catch {
+      setExportError('Could not rasterize the composition.')
     } finally {
       setExporting(false)
     }
@@ -299,17 +364,37 @@ export function TopBar() {
         <span aria-hidden="true" className="h-5 w-px bg-border" />
 
         <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={!hasBase || exporting}
-            title={exporting ? 'Exporting…' : 'Export composition as SVG'}
-            aria-label="Export SVG"
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg shadow-sm transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-subtle disabled:shadow-none"
-            data-testid="export-button"
-          >
-            {exporting ? 'Exporting…' : 'Export'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={!hasBase || exporting}
+              title={exporting ? 'Exporting…' : 'Export composition as SVG'}
+              aria-label="Export SVG"
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-fg shadow-sm transition-colors hover:bg-primary-strong focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:bg-raised disabled:text-fg-subtle disabled:shadow-none"
+              data-testid="export-button"
+            >
+              {exporting ? 'Exporting…' : 'Export'}
+            </button>
+            {/* Secondary raster export: the flattened image + a JSON manifest
+                of layer coordinates/sizes. Ghost-weight so Export (SVG) keeps
+                its primary role; the pair shares the in-flight guard. */}
+            <button
+              type="button"
+              onClick={handleExportWebp}
+              disabled={!hasBase || exporting}
+              title={
+                exporting
+                  ? 'Exporting…'
+                  : 'Export a flattened WebP image + a JSON manifest of layer positions'
+              }
+              aria-label="Export WebP and manifest"
+              className="rounded-md border border-border bg-raised px-2.5 py-1.5 text-sm font-medium text-fg-muted shadow-sm transition-colors hover:border-fg-muted hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-fg-subtle disabled:shadow-none"
+              data-testid="export-webp-button"
+            >
+              WebP
+            </button>
+          </div>
           {exportError && (
             <span
               className="max-w-[16rem] text-[11px] text-danger"
@@ -317,6 +402,29 @@ export function TopBar() {
             >
               {exportError}
             </span>
+          )}
+          {exportNote && (
+            <span
+              className="max-w-[16rem] text-[11px] text-fg-muted"
+              data-testid="export-note"
+            >
+              {exportNote}
+            </span>
+          )}
+          {pendingManifest && (
+            <button
+              type="button"
+              onClick={() => {
+                downloadFile('composition.json', pendingManifest)
+                setPendingManifest(null)
+                setExportNote(null)
+              }}
+              title="Download composition.json (the layer manifest)"
+              className="rounded-md border border-border bg-raised px-2.5 py-1 text-xs font-medium text-fg-muted transition-colors hover:border-fg-muted hover:bg-raised-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-fg-muted/40"
+              data-testid="download-manifest"
+            >
+              Download manifest
+            </button>
           )}
         </div>
 

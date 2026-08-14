@@ -333,6 +333,44 @@ describe('buildSvgDocument', () => {
     expect(rect!.getAttribute('data-filename')).toBe('blank-1024.svg')
   })
 
+  it('emits a TRANSPARENT blank base as a <rect fill="none"> (alpha survives)', () => {
+    const state: CompositionState = {
+      canvas: { width: 512, height: 512 },
+      layers: [
+        makeLayer({
+          id: 'blank-base',
+          originalFilename: 'blank-512.svg',
+          name: null,          zIndex: 0,
+          isBaseImage: true,
+          x: 0,
+          y: 0,
+          width: 512,
+          height: 512,
+          naturalWidth: 512,
+          naturalHeight: 512,
+        }),
+      ],
+      selectedLayerIds: [],
+      isDirty: false,
+    }
+    const sources: Record<string, LayerSource> = {
+      'blank-base': { kind: 'blank', fill: null },
+    }
+    const built = buildSvgDocument(state, sources, FIXED_OPTS)
+    const doc = parse(built)
+    // No <image> (never an embedded raster) — the layer stays a literal rect…
+    expect(doc.querySelectorAll('image')).toHaveLength(0)
+    const rect = doc.querySelector('rect')
+    expect(rect).not.toBeNull()
+    // …but a TRANSPARENT one: fill="none" paints nothing, so the rasterized
+    // WebP export keeps its alpha where the base doesn't cover.
+    expect(rect!.getAttribute('fill')).toBe('none')
+    expect(rect!.getAttribute('data-role')).toBe('base')
+    expect(rect!.getAttribute('data-filename')).toBe('blank-512.svg')
+    // Raw-byte form too — a rasterizer sees exactly this attribute.
+    expect(built).toContain('fill="none"')
+  })
+
   it('emits an svg layer as a nested <svg> carrying the namespaced body', () => {
     const markup =
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
